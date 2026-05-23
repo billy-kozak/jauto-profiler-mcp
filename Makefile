@@ -33,12 +33,18 @@ NO_DEPS_TARGETS += clean directories dir_clean
 
 JAVA_HOME = $(shell build-src/find-java-home)
 JAVA_INC = -I$(JAVA_HOME)/include -I$(JAVA_HOME)/include/linux
+
+JAVAC := $(JAVA_HOME)/bin/javac
+JAVACFLAGS :=
+JAR := $(JAVA_HOME)/bin/jar
 ###############################################################################
 #                                 BUILD DIRS                                  #
 ###############################################################################
 BUILD_DIR := build
 OBJ_DIR := build/c/obj
 DEP_DIR := build/c/deps
+JAVA_BUILD_DIR := build/java
+JAR_FILE := $(BUILD_DIR)/jauto-prof-lib.jar
 
 OUTPUT_DIR := bin
 OUT_LIB := $(OUTPUT_DIR)/jauto-profiler.so
@@ -53,6 +59,10 @@ NO_DEPS_TARGETS += clean directories
 C_FILES = $(shell find $(CSRC_ROOT) -name "*.c")
 O_FILES = $(C_FILES:$(CSRC_ROOT)/%.c=$(OBJ_DIR)/%.o)
 D_FILES = $(C_FILES:$(CSRC_ROOT)/%.c=$(DEP_DIR)/%.d)
+
+JSRC_ROOT = java-src/main/java
+JAVA_FILES = $(shell find $(JSRC_ROOT) -name "*.java")
+CLASS_FILES = $(JAVA_FILES:$(JSRC_ROOT)/%.java=$(JAVA_BUILD_DIR)/%.class)
 
 vpath %.c $(CSRC_DIRS)
 
@@ -77,11 +87,11 @@ all: optimized
 
 optimized: CFLAGS +=-Os -flto=auto
 optomized: LDFLAGS += -Os -flto=auto
-optimized: shared
+optimized: shared java
 
 debug: CFLAGS +=-O0
 debug: LDFLAGS += -O0
-debug: shared
+debug: shared java
 
 shared: $(D_FILES) $(OUT_LIB)
 
@@ -99,6 +109,16 @@ $(OUT_LIB): $(O_FILES) $(OUTPUT_DIR)/.dir_dummy
 %.dir_dummy:
 	mkdir -p $(dir $(@))
 	@touch $(@)
+
+java: $(JAR_FILE)
+
+$(JAR_FILE): $(CLASS_FILES) $(OUTPUT_DIR)/.dir_dummy
+	$(JAR) cf $@ -C $(JAVA_BUILD_DIR) .
+	cp $@ $(OUTPUT_DIR)/
+
+$(CLASS_FILES): $(JAVA_BUILD_DIR)/%.class: $(JSRC_ROOT)/%.java
+	@mkdir -p $(dir $(@))
+	$(JAVAC) $(JAVACFLAGS) -d $(JAVA_BUILD_DIR) -sourcepath $(JSRC_ROOT) $<
 
 .PHONY: clean
 clean:

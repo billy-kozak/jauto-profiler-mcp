@@ -1,0 +1,11 @@
+#!/bin/bash
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+PROJECT_ROOT="$(readlink -f "$SCRIPT_DIR/..")"
+
+JAVA_HOME="$("$PROJECT_ROOT/build-src/find-java-home")"
+
+exec "$JAVA_HOME/bin/java" \
+	-agentpath:"${PROJECT_ROOT}/bin/jauto-profiler.so" \
+	-cp "$PROJECT_ROOT/bin/jauto-prof-lib.jar" \
+	app.autoprofiler.TestMain "$@"
