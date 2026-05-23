@@ -37,6 +37,8 @@ JAVA_INC = -I$(JAVA_HOME)/include -I$(JAVA_HOME)/include/linux
 JAVAC := $(JAVA_HOME)/bin/javac
 JAVACFLAGS :=
 JAR := $(JAVA_HOME)/bin/jar
+
+LIBS := -lpthread
 ###############################################################################
 #                                 BUILD DIRS                                  #
 ###############################################################################
@@ -66,7 +68,7 @@ CLASS_FILES = $(JAVA_FILES:$(JSRC_ROOT)/%.java=$(JAVA_BUILD_DIR)/%.class)
 
 vpath %.c $(CSRC_DIRS)
 
-INC = $(JAVA_INC)
+INC = $(JAVA_INC) -I$(CSRC_ROOT)
 
 CLEAN_FILES += $(wildcard $(BUILD_DIR)/*)
 CLEAN_FILES += $(wildcard $(OUTPUT_DIR)/*)
@@ -104,7 +106,7 @@ $(O_FILES): $(OBJ_DIR)/%.o: $(CSRC_ROOT)/%.c
 	$(CC) $(INC) $(CFLAGS) -c $< -o $@
 
 $(OUT_LIB): $(O_FILES) $(OUTPUT_DIR)/.dir_dummy
-	$(LD) $(LDFLAGS) $(O_FILES) -o $@
+	$(LD) $(LDFLAGS) $(O_FILES) $(LIBS) -o $@
 
 %.dir_dummy:
 	mkdir -p $(dir $(@))
