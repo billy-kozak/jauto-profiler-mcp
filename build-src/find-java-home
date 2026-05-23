@@ -1,0 +1,4 @@
+#!/bin/bash
+
+
+readlink -f "$(dirname "$(readlink -f "$(which java)")")/../"
