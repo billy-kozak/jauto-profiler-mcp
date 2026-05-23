@@ -16,17 +16,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef _EV_QUEUE_H
-#define _EV_QUEUE_H
+#ifndef _PROF_SERVER_H
+#define _PROF_SERVER_H
 
-#include <stdlib.h>
-#include <sys/types.h>
+struct prof_server;
 
-struct ev_queue;
+struct prof_server *ps_init(void);
+void ps_destory(struct prof_server *ps);
+int ps_send_class_loaded(struct prof_server *ps, const char *name);
 
-struct ev_queue *evq_init(void);
-void evq_destroy(struct ev_queue *q);
-ssize_t evq_wait(struct ev_queue *q, void **data);
-int evq_push(struct ev_queue *q, void *data, size_t size);
-
-#endif /* _EV_QUEUE_H */
+#endif /* _PROF_SERVER_H */

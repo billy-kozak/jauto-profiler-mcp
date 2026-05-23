@@ -94,6 +94,30 @@ fail:
 	return NULL;
 }
 
+void evq_destroy(struct ev_queue *q)
+{
+	struct ev_queue_node *node;
+	struct ev_queue_node *next;
+
+	node = q->head;
+	while (node != NULL) {
+		next = node->next;
+		free(node);
+		node = next;
+	}
+
+	node = q->free_list;
+	while (node != NULL) {
+		next = node->next;
+		free(node);
+		node = next;
+	}
+
+	pthread_mutex_destroy(&q->mutex);
+	pthread_cond_destroy(&q->cond);
+	free(q);
+}
+
 int evq_push(struct ev_queue *q, void *data, size_t size)
 {
 	struct ev_queue_node *node;
