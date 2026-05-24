@@ -58,7 +58,8 @@ struct user_if {
 	int shutdown_fd;
 	pthread_t listener;
 	char *socket_path;
-	int (*handler)(struct user_msg *, struct user_if_client *);
+	int (*handler)(void*, struct user_msg *, struct user_if_client *);
+	void *handler_data;
 	DYNARR_TEMPLATE(struct uif_client_ctx) clients;
 };
 
@@ -216,6 +217,7 @@ static void handle_client_data(
 	if (ctx->bytes_read == ctx->buf_expected) {
 		if (uif->handler != NULL) {
 			uif->handler(
+				uif->handler_data,
 				(struct user_msg *)ctx->buf,
 				&ctx->client
 			);
@@ -293,6 +295,7 @@ struct user_if *uif_init(const char *path)
 	}
 
 	uif->handler = NULL;
+	uif->handler_data = NULL;
 
 	uif->socket_path = strdup(path);
 	if (uif->socket_path == NULL) {
@@ -394,9 +397,11 @@ struct user_if *uif_destroy(struct user_if *uif)
 
 void uif_register_handler(
 	struct user_if *uif,
-	int (*handler)(struct user_msg *, struct user_if_client *)
+	int (*handler)(void*, struct user_msg *, struct user_if_client *),
+	void *data
 ) {
 	uif->handler = handler;
+	uif->handler_data = data;
 }
 
 int uif_send(

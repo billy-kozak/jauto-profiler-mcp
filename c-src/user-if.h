@@ -51,8 +51,9 @@ struct PACKED user_msg {
 struct user_if *uif_init(const char *path);
 struct user_if *uif_destroy(struct user_if *uif);
 void uif_register_handler(
-		struct user_if *uif,
-		int (*handler)(struct user_msg*, struct user_if_client*)
+	struct user_if *uif,
+	int (*handler)(void* data, struct user_msg*, struct user_if_client*),
+	void *data
 );
 int uif_send(
 		struct user_if *uif,
