@@ -22,7 +22,7 @@
 struct prof_server;
 
 struct prof_server *ps_init(void);
-void ps_destory(struct prof_server *ps);
+void ps_destroy(struct prof_server *ps);
 int ps_send_class_loaded(struct prof_server *ps, const char *name);
 
 #endif /* _PROF_SERVER_H */

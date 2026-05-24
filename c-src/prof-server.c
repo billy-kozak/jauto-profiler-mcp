@@ -157,7 +157,7 @@ fail:
 	return NULL;
 }
 
-void ps_destory(struct prof_server *ps)
+void ps_destroy(struct prof_server *ps)
 {
 	struct ps_msg *shutdown;
 	size_t i;
