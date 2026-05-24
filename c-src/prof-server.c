@@ -22,6 +22,7 @@
 #include "prof-server-msg.h"
 #include "prof-env.h"
 #include "user-if.h"
+#include "ps-uif-handler.h"
 
 #include <jvmti.h>
 #include <jni.h>
@@ -164,6 +165,8 @@ struct prof_server *ps_init(void)
 		fprintf(stderr, "User socket creation failed\n");
 		goto fail_queue;
 	}
+
+	uif_register_handler(ps->uif, ps_uif_handler, ps);
 
 	return ps;
 
