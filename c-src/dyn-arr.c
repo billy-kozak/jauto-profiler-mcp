@@ -74,12 +74,10 @@ void dynarr_remove(struct dynarr_head *head, void *data, int index) {
 
 	assert(index >= 0 && index < head->len);
 
-	size_t dst_offset = (index * head->elem_size);
-
-	uint8_t *dst = ((uint8_t*)data) + (dst_offset);
+	uint8_t *dst = ((uint8_t*)data) + (index * head->elem_size);
 	uint8_t *src = dst + head->elem_size;
 
-	size_t move_len = ((head->len - 1) * head->elem_size) - dst_offset;
+	size_t move_len = (head->len - (index + 1)) * head->elem_size;
 
 	memmove(dst, src, move_len);
 
