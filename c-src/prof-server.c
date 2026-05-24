@@ -20,6 +20,8 @@
 
 #include "ev-queue.h"
 #include "prof-server-msg.h"
+#include "prof-env.h"
+#include "user-if.h"
 
 #include <jvmti.h>
 #include <jni.h>
@@ -36,6 +38,7 @@ struct class_info {
 
 struct prof_server {
 	struct ev_queue *ev_q;
+	struct user_if *uif;
 	jvmtiEnv *jvmti;
 	sem_t shutdown_sem;
 	size_t num_loaded_classes;
@@ -156,8 +159,16 @@ struct prof_server *ps_init(void)
 		goto fail_sem;
 	}
 
+	ps->uif = uif_init(prof_socket_path());
+	if (ps->uif == NULL) {
+		fprintf(stderr, "User socket creation failed\n");
+		goto fail_queue;
+	}
+
 	return ps;
 
+fail_queue:
+	evq_destroy(ps->ev_q);
 fail_sem:
 	sem_destroy(&ps->shutdown_sem);
 fail_classes:
@@ -219,6 +230,8 @@ void ps_destroy(struct prof_server *ps)
 		}
 		sem_wait(&ps->shutdown_sem);
 	}
+
+	uif_destroy(ps->uif);
 
 	for (i = 0; i < ps->num_loaded_classes; i++) {
 		free(ps->loaded_classes[i].name);

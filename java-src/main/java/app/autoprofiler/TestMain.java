@@ -19,7 +19,19 @@
 package app.autoprofiler;
 
 class TestMain {
-	public static void main(String[] args) {
-		System.out.println("Hello World!");
+	public static void main(String[] args) throws InterruptedException {
+
+		int count;
+
+		if (args.length < 1) {
+			count = 10;
+		} else {
+			count = Integer.parseInt(args[0]);
+		}
+
+		for (int i = count - 1; i >= 0; i--) {
+			System.out.println("Countdown " + i);
+			Thread.sleep(1000);
+		}
 	}
 }
