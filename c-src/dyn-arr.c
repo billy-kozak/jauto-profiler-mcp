@@ -23,18 +23,11 @@
 #include <stdint.h>
 #include <assert.h>
 
-#define DEFAULT_INIT_CAPACITY 16
-
-int dynarr_init(
-	struct dynarr_head *head,
-	size_t elem_size,
+int dynarr_alloc(
 	size_t capacity,
+	size_t elem_size,
 	void **data
 ) {
-	head->capacity = capacity;
-	head->len = 0;
-	head->elem_size = elem_size;
-
 	*data = calloc(capacity, elem_size);
 
 	if(*data == NULL) {
@@ -44,48 +37,29 @@ int dynarr_init(
 	}
 }
 
-int dynarr_grow(struct dynarr_head *head, void **data) {
+int dynarr_grow(size_t new_cap, size_t elem_size, void **data) {
+	void *new = realloc(*data, new_cap * elem_size);
 
-	head->len += 1;
-
-	if(head->capacity >= head->len) {
-		return 0;
-	}
-
-	size_t new_cap = head->capacity != 0 ?
-		head->capacity * 2 : DEFAULT_INIT_CAPACITY;
-
-	void *new = realloc(*data, new_cap * head->elem_size);
 	if(new == NULL) {
 		return 1;
 	}
 
-	head->capacity = new_cap;
 	*data = new;
 	return 0;
 }
 
-void dynarr_remove(struct dynarr_head *head, void *data, int index) {
+void dynarr_remove(void *data, int index, size_t len, size_t elem_size) {
 
-	if(index == (head->len - 1)) {
-		head->len -= 1;
+	if(index == len - 1) {
 		return;
 	}
 
-	assert(index >= 0 && index < head->len);
+	assert(index >= 0 && index < len);
 
-	uint8_t *dst = ((uint8_t*)data) + (index * head->elem_size);
-	uint8_t *src = dst + head->elem_size;
+	uint8_t *dst = ((uint8_t*)data) + (index * elem_size);
+	uint8_t *src = dst + elem_size;
 
-	size_t move_len = (head->len - (index + 1)) * head->elem_size;
+	size_t move_len = (len - (index + 1)) * elem_size;
 
 	memmove(dst, src, move_len);
-
-	head->len -= 1;
-}
-
-void dynarr_destroy(struct dynarr_head *head, void *data) {
-	head->len = 0;
-	head->capacity = 0;
-	free(data);
 }

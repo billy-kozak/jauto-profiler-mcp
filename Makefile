@@ -23,7 +23,7 @@
 CC := gcc
 LD := gcc
 
-CFLAGS += -Wall -std=gnu11
+CFLAGS += -Wall -std=gnu23
 LDFLAGS += -Wall
 
 CFLAGS += -fvisibility=hidden -fPIC -ffunction-sections

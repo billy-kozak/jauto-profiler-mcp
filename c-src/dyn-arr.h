@@ -26,25 +26,53 @@ struct dynarr_head {
 	size_t elem_size;
 };
 
-int dynarr_init(
-	struct dynarr_head *head,
-	size_t elem_size,
-	size_t capacity,
-	void **data
-);
+int dynarr_alloc(size_t capacity, size_t elem_size, void **data);
+int dynarr_grow(size_t cap, size_t elem_size, void **data);
+void dynarr_remove(void *data, int index, size_t len, size_t elem_size);
 
-int dynarr_grow(struct dynarr_head *head, void **data);
-void dynarr_remove(struct dynarr_head *head, void *data, int index);
-void dynarr_destroy(struct dynarr_head *head, void *data);
+#define DYNARR_DEFAULT_INIT_CAPACITY 16
 
-#define DYNARR_TEMPLATE(typ) struct { struct dynarr_head head; typ *arr; }
-#define DYNARR_INIT(s, cap) dynarr_init( \
-		&s.head, sizeof(*s.arr), cap, (void**)&(s.arr) \
-)
-#define DYNARR_LEN(s) (s.head.len)
-#define DYNARR_REMOVE(s, i) dynarr_remove(&s.head, s.arr, i)
-#define DYNARR_DESTROY(s) dynarr_destroy(&s.head, s.arr)
-#define DYNARR_GROW(s) dynarr_grow(&s.head, (void**)&(s.arr))
-#define DYNARR_AT(s, i) (s.arr[i])
+#define DYNARR_TEMPLATE(prefix, name, typ) \
+	struct name { \
+		size_t len; \
+		size_t capacity; \
+		typ *arr; \
+	}; \
+	int prefix##_init(struct name *arr, size_t init_cap) { \
+		arr->len = 0; \
+		if(init_cap <= 0) { \
+			arr->capacity = DYNARR_DEFAULT_INIT_CAPACITY; \
+		} else { \
+			arr->capacity = init_cap; \
+		} \
+		return dynarr_alloc( \
+			arr->capacity, sizeof(typ), (void**)&arr->arr \
+		); \
+	} \
+	typ * prefix##_add(struct name *arr) { \
+		if(arr->len >= arr->capacity) { \
+			size_t new_cap = arr->capacity * 2; \
+			int ret = dynarr_grow( \
+				new_cap, sizeof(typ), (void**)&arr->arr \
+			); \
+			if(ret != 0) { \
+				return NULL; \
+			} \
+		} \
+		arr->len += 1; \
+		return arr->arr + arr->len - 1; \
+	} \
+	void prefix##_remove(struct name *arr, int index) { \
+		dynarr_remove( \
+			arr->arr, index, arr->len, sizeof(*(arr->arr)) \
+		); \
+		arr->len -= 1; \
+	} \
+	void prefix##_destroy(struct name *arr) { \
+		arr->len = 0; \
+		arr->capacity = 0; \
+		free(arr->arr); \
+		arr->arr = NULL; \
+	}
 
 #endif /* _DYN_ARR_H */

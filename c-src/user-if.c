@@ -55,6 +55,8 @@ struct uif_client_ctx {
 	size_t bytes_read;
 };
 
+DYNARR_TEMPLATE(client_list, client_list, struct uif_client_ctx);
+
 struct user_if {
 	int server_fd;
 	int epoll_fd;
@@ -63,8 +65,9 @@ struct user_if {
 	char *socket_path;
 	int (*handler)(void*, struct user_msg *, struct user_if_client *);
 	void *handler_data;
-	DYNARR_TEMPLATE(struct uif_client_ctx) clients;
+	struct client_list clients;
 };
+
 
 static int write_exact(int fd, const void *buf, size_t n)
 {
@@ -85,7 +88,7 @@ static struct uif_client_ctx *find_client(struct user_if *uif, int fd)
 {
 	int i;
 
-	for (i = 0; i < DYNARR_LEN(uif->clients); i++) {
+	for (i = 0; i < (int)uif->clients.len; i++) {
 		if (uif->clients.arr[i].client->fd == fd) {
 			return &uif->clients.arr[i];
 		}
@@ -103,9 +106,9 @@ static void close_client(struct user_if *uif, struct uif_client_ctx *ctx)
 	epoll_ctl(uif->epoll_fd, EPOLL_CTL_DEL, client->fd, NULL);
 	close(client->fd);
 
-	for (i = 0; i < DYNARR_LEN(uif->clients); i++) {
+	for (i = 0; i < (int)uif->clients.len; i++) {
 		if (&uif->clients.arr[i] == ctx) {
-			DYNARR_REMOVE(uif->clients, i);
+			client_list_remove(&uif->clients, i);
 			break;
 		}
 	}
@@ -117,7 +120,7 @@ static void close_client(struct user_if *uif, struct uif_client_ctx *ctx)
 static void close_all_clients(struct user_if *uif)
 {
 	int i;
-	for (i = 0; i < DYNARR_LEN(uif->clients); i++) {
+	for (i = 0; i < (int)uif->clients.len; i++) {
 		struct user_if_client *client = uif->clients.arr[i].client;
 		uif_client_set_closed(client);
 		close(client->fd);
@@ -132,12 +135,12 @@ static int accept_client(struct user_if *uif)
 	struct user_if_client *client;
 	struct epoll_event ev;
 	int fd;
-	int i = DYNARR_LEN(uif->clients);
+	int i = (int)uif->clients.len;
 
-	if(DYNARR_GROW(uif->clients)) {
+	ctx = client_list_add(&uif->clients);
+	if (ctx == NULL) {
 		goto fail_0;
 	}
-	ctx = &DYNARR_AT(uif->clients, i);
 
 	fd = accept(uif->server_fd, NULL, NULL);
 	if (fd < 0) {
@@ -182,7 +185,7 @@ fail_3:
 fail_2:
 	close(fd);
 fail_1:
-	DYNARR_REMOVE(uif->clients, i);
+	client_list_remove(&uif->clients, i);
 fail_0:
 	return 1;
 }
@@ -312,7 +315,7 @@ struct user_if *uif_init(const char *path)
 	if (uif == NULL) {
 		return NULL;
 	}
-	if(DYNARR_INIT(uif->clients, UIF_INIT_CAP_CLIENTS)) {
+	if(client_list_init(&uif->clients, UIF_INIT_CAP_CLIENTS)) {
 		goto fail;
 	}
 
@@ -392,7 +395,7 @@ fail_epoll:
 fail_path:
 	free(uif->socket_path);
 fail_clients:
-	DYNARR_DESTROY(uif->clients);
+	client_list_destroy(&uif->clients);
 fail:
 	free(uif);
 	return NULL;
@@ -412,7 +415,7 @@ struct user_if *uif_destroy(struct user_if *uif)
 	close(uif->epoll_fd);
 	unlink(uif->socket_path);
 	free(uif->socket_path);
-	DYNARR_DESTROY(uif->clients);
+	client_list_destroy(&uif->clients);
 	free(uif);
 	return NULL;
 }
