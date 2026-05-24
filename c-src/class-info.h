@@ -15,35 +15,18 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef _PROF_SERVER_MSG_H
-#define _PROF_SERVER_MSG_H
+#ifndef _CLASS_INFO_H
+#define _CLASS_INFO_H
 
 #include <stddef.h>
 
-struct user_if_client;
-
-enum ps_msg_type {
-	CLASS_LOADED,
-	USR_RQ_LOADED_CLASSES,
-	PS_SHUTDOWN,
-};
-
-struct psm_class_loaded {
+struct class_info {
 	char *name;
-	unsigned char *bytecode;
-	size_t bytecode_len;
+	char **methods;
+	size_t num_methods;
 };
 
-struct psm_usr_rq_loaded_classes {
-	struct user_if_client *client;
-};
+struct class_info *ci_alloc(char *name, char **methods, size_t num_methods);
+void ci_free(struct class_info *ci);
 
-struct ps_msg {
-	enum ps_msg_type type;
-	union {
-		struct psm_class_loaded class_loaded;
-		struct psm_usr_rq_loaded_classes usr_rq_loaded_classes;
-	} body;
-};
-
-#endif /* _PROF_SERVER_MSG_H */
+#endif /* _CLASS_INFO_H */

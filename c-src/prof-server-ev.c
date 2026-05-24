@@ -24,29 +24,65 @@
 #include <stdlib.h>
 #include <string.h>
 
-int ps_send_class_loaded(struct prof_server *ps, const char *name)
-{
+struct ps_msg *ps_send_class_ev_alloc(
+	const char *name,
+	const unsigned char *bytecode,
+	size_t bytecode_len
+) {
 	struct ps_msg *msg;
 	char *name_copy;
-	size_t msg_size = sizeof(*msg);
+	unsigned char *bytecode_copy;
 
 	name_copy = strdup(name);
 	if (name_copy == NULL) {
-		return -1;
+		return NULL;
 	}
+
+	bytecode_copy = malloc(bytecode_len);
+	if (bytecode_copy == NULL) {
+		free(name_copy);
+		return NULL;
+	}
+	memcpy(bytecode_copy, bytecode, bytecode_len);
 
 	msg = malloc(sizeof(*msg));
 	if (msg == NULL) {
 		free(name_copy);
-		return -1;
+		free(bytecode_copy);
+		return NULL;
 	}
 
 	msg->type = CLASS_LOADED;
 	msg->body.class_loaded.name = name_copy;
+	msg->body.class_loaded.bytecode = bytecode_copy;
+	msg->body.class_loaded.bytecode_len = bytecode_len;
 
-	if (ps_send_ev(ps, msg, msg_size) != 0) {
-		free(name_copy);
-		free(msg);
+	return msg;
+}
+
+void ps_send_class_ev_dealloc(struct ps_msg *msg)
+{
+	free(msg->body.class_loaded.name);
+	free(msg->body.class_loaded.bytecode);
+	free(msg);
+}
+
+int ps_send_class_loaded(
+	struct prof_server *ps,
+	const char *name,
+	const unsigned char *bytecode,
+	size_t bytecode_len
+) {
+	struct ps_msg *msg = ps_send_class_ev_alloc(
+		name, bytecode, bytecode_len
+	);
+
+	if (msg == NULL) {
+		return -1;
+	}
+
+	if (ps_send_ev(ps, msg, sizeof(*msg)) != 0) {
+		ps_send_class_ev_dealloc(msg);
 		return -1;
 	}
 

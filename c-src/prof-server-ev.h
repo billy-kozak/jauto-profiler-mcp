@@ -18,10 +18,25 @@
 #ifndef _PROF_SERVER_EV_H
 #define _PROF_SERVER_EV_H
 
+#include <stddef.h>
+
 struct prof_server;
+struct ps_msg;
 struct user_if_client;
 
-int ps_send_class_loaded(struct prof_server *ps, const char *name);
+struct ps_msg *ps_send_class_ev_alloc(
+	const char *name,
+	const unsigned char *bytecode,
+	size_t bytecode_len
+);
+void ps_send_class_ev_dealloc(struct ps_msg *msg);
+
+int ps_send_class_loaded(
+	struct prof_server *ps,
+	const char *name,
+	const unsigned char *bytecode,
+	size_t bytecode_len
+);
 int ps_send_usr_rq_loaded_classes(
 	struct prof_server *ps, struct user_if_client *client
 );

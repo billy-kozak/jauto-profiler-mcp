@@ -15,35 +15,40 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef _PROF_SERVER_MSG_H
-#define _PROF_SERVER_MSG_H
 
-#include <stddef.h>
+#include "class-info.h"
 
-struct user_if_client;
+#include <stdlib.h>
+#include <string.h>
 
-enum ps_msg_type {
-	CLASS_LOADED,
-	USR_RQ_LOADED_CLASSES,
-	PS_SHUTDOWN,
-};
+struct class_info *ci_alloc(char *name, char **methods, size_t num_methods)
+{
+	struct class_info *ci = malloc(sizeof(*ci));
 
-struct psm_class_loaded {
-	char *name;
-	unsigned char *bytecode;
-	size_t bytecode_len;
-};
+	if (ci == NULL) {
+		return NULL;
+	}
+	ci->name = strdup(name);
+	if(ci->name == NULL) {
+		goto fail;
+	}
 
-struct psm_usr_rq_loaded_classes {
-	struct user_if_client *client;
-};
+	ci->methods = methods;
+	ci->num_methods = num_methods;
+	return ci;
+fail:
+	free(ci);
+	return NULL;
+}
 
-struct ps_msg {
-	enum ps_msg_type type;
-	union {
-		struct psm_class_loaded class_loaded;
-		struct psm_usr_rq_loaded_classes usr_rq_loaded_classes;
-	} body;
-};
+void ci_free(struct class_info *ci)
+{
+	size_t i;
 
-#endif /* _PROF_SERVER_MSG_H */
+	free(ci->name);
+	for (i = 0; i < ci->num_methods; i++) {
+		free(ci->methods[i]);
+	}
+	free(ci->methods);
+	free(ci);
+}

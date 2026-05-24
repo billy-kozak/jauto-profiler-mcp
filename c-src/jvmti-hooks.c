@@ -42,7 +42,12 @@ static void JNICALL class_file_load_hook(
 ) {
 	if(name != NULL) {
 		if (server != NULL) {
-			ps_send_class_loaded(server, name);
+			ps_send_class_loaded(
+				server,
+				name,
+				class_data,
+				(size_t)class_data_len
+			);
 		} else {
 			fprintf(stderr, "server was null at class load\n");
 		}

@@ -19,6 +19,14 @@
 package app.autoprofiler;
 
 class TestMain {
+
+	private static void profilerCountdownTest(int count) throws InterruptedException {
+		for (int i = count - 1; i >= 0; i--) {
+			System.out.println("Countdown " + i);
+			Thread.sleep(1000);
+		}
+	}
+
 	public static void main(String[] args) throws InterruptedException {
 
 		int count;
@@ -28,10 +36,6 @@ class TestMain {
 		} else {
 			count = Integer.parseInt(args[0]);
 		}
-
-		for (int i = count - 1; i >= 0; i--) {
-			System.out.println("Countdown " + i);
-			Thread.sleep(1000);
-		}
+		profilerCountdownTest(count);
 	}
 }

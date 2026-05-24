@@ -15,35 +15,23 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef _PROF_SERVER_MSG_H
-#define _PROF_SERVER_MSG_H
+#ifndef _BYTECODE_H
+#define _BYTECODE_H
 
 #include <stddef.h>
 
-struct user_if_client;
+/*
+ * Extract method names and descriptors from a Java class file.
+ *
+ * On success, *methods_out is a heap-allocated array of heap-allocated
+ * strings each in "name:descriptor" form, and *count_out is its length.
+ * The caller owns all allocations. Returns 0 on success, -1 on error.
+ */
+int bc_extract_methods(
+	const unsigned char *class_data,
+	size_t class_data_len,
+	char ***methods_out,
+	size_t *count_out
+);
 
-enum ps_msg_type {
-	CLASS_LOADED,
-	USR_RQ_LOADED_CLASSES,
-	PS_SHUTDOWN,
-};
-
-struct psm_class_loaded {
-	char *name;
-	unsigned char *bytecode;
-	size_t bytecode_len;
-};
-
-struct psm_usr_rq_loaded_classes {
-	struct user_if_client *client;
-};
-
-struct ps_msg {
-	enum ps_msg_type type;
-	union {
-		struct psm_class_loaded class_loaded;
-		struct psm_usr_rq_loaded_classes usr_rq_loaded_classes;
-	} body;
-};
-
-#endif /* _PROF_SERVER_MSG_H */
+#endif /* _BYTECODE_H */

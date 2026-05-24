@@ -31,7 +31,6 @@ struct prof_server *ps_start(
 	struct prof_server *ps, jvmtiEnv *jvmti, JNIEnv *jni_env
 );
 void ps_destroy(struct prof_server *ps);
-int ps_send_class_loaded(struct prof_server *ps, const char *name);
 int ps_send_ev(struct prof_server *ps, struct ps_msg *msg, size_t size);
 
 #endif /* _PROF_SERVER_H */

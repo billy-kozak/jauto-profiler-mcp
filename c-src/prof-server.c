@@ -23,6 +23,9 @@
 #include "prof-env.h"
 #include "user-if.h"
 #include "ps-uif-handler.h"
+#include "prof-server-ev.h"
+#include "class-info.h"
+#include "bytecode.h"
 
 #include <jvmti.h>
 #include <jni.h>
@@ -34,10 +37,6 @@
 
 #define PS_CLASSES_INITIAL_CAP 16
 
-struct class_info {
-	char *name;
-};
-
 struct prof_server {
 	struct ev_queue *ev_q;
 	struct user_if *uif;
@@ -45,15 +44,15 @@ struct prof_server {
 	sem_t shutdown_sem;
 	size_t num_loaded_classes;
 	size_t classes_capacity;
-	struct class_info *loaded_classes;
+	struct class_info **loaded_classes;
 	int thread_running;
 };
 
-static int add_class(struct prof_server *ps, char *name)
+static int add_class(struct prof_server *ps, struct class_info *ci)
 {
 	if (ps->num_loaded_classes == ps->classes_capacity) {
 		size_t new_cap = ps->classes_capacity * 2;
-		struct class_info *arr = realloc(
+		struct class_info **arr = realloc(
 			ps->loaded_classes,
 			new_cap * sizeof(*arr)
 		);
@@ -64,7 +63,7 @@ static int add_class(struct prof_server *ps, char *name)
 		ps->classes_capacity = new_cap;
 	}
 
-	ps->loaded_classes[ps->num_loaded_classes].name = name;
+	ps->loaded_classes[ps->num_loaded_classes] = ci;
 	ps->num_loaded_classes += 1;
 
 	return 0;
@@ -74,12 +73,31 @@ static void handle_class_loaded(
 	struct prof_server *ps,
 	struct ps_msg *msg
 ) {
-	char *name = (char *)msg->body.class_loaded.name;
+	char *name = msg->body.class_loaded.name;
+	unsigned char *bytecode = msg->body.class_loaded.bytecode;
+	size_t bytecode_len = msg->body.class_loaded.bytecode_len;
+	char **methods = NULL;
+	size_t num_methods = 0;
+	struct class_info *ci;
+	size_t i;
 
-	if (add_class(ps, name) != 0) {
-		free(name);
+	bc_extract_methods(bytecode, bytecode_len, &methods, &num_methods);
+
+	ci = ci_alloc(name, methods, num_methods);
+	if (ci == NULL) {
+		for (i = 0; i < num_methods; i++) {
+			free(methods[i]);
+		}
+		free(methods);
+	} else if (add_class(ps, ci) != 0) {
+		ci_free(ci);
 	}
-	free(msg);
+
+	for(int i = 0; i < num_methods; i++) {
+		fprintf(stderr, "method %d: %s\n", i, methods[i]);
+	}
+
+	ps_send_class_ev_dealloc(msg);
 }
 
 static void handle_usr_rq_loaded_classes(
@@ -98,7 +116,7 @@ static void handle_usr_rq_loaded_classes(
 	body_size = sizeof(uint32_t);
 	for (i = 0; i < ps->num_loaded_classes; i++) {
 		body_size +=
-			sizeof(uint16_t) + strlen(ps->loaded_classes[i].name);
+			sizeof(uint16_t) + strlen(ps->loaded_classes[i]->name);
 	}
 
 	response = malloc(offsetof(struct user_msg, body) + body_size);
@@ -118,11 +136,11 @@ static void handle_usr_rq_loaded_classes(
 
 	for (i = 0; i < ps->num_loaded_classes; i++) {
 		uint16_t name_len = (uint16_t)strlen(
-			ps->loaded_classes[i].name
+			ps->loaded_classes[i]->name
 		);
 		memcpy(p, &name_len, sizeof(name_len));
 		p += sizeof(name_len);
-		memcpy(p, ps->loaded_classes[i].name, name_len);
+		memcpy(p, ps->loaded_classes[i]->name, name_len);
 		p += name_len;
 	}
 
@@ -279,7 +297,7 @@ void ps_destroy(struct prof_server *ps)
 	uif_destroy(ps->uif);
 
 	for (i = 0; i < ps->num_loaded_classes; i++) {
-		free(ps->loaded_classes[i].name);
+		ci_free(ps->loaded_classes[i]);
 	}
 	free(ps->loaded_classes);
 
