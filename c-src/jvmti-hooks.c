@@ -22,7 +22,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "prof-server.h"
+
 static jvmtiEnv *jvmti = NULL;
+static struct prof_server *server = NULL;
 
 static void JNICALL class_file_load_hook(
     jvmtiEnv *jvmti_env,
@@ -38,14 +41,28 @@ static void JNICALL class_file_load_hook(
 ) {
 	if(name != NULL) {
 		printf("Loaded class: %s\n", name);
+		if (server != NULL) {
+			ps_send_class_loaded(server, name);
+		}
 	} else {
 		printf("Loaded unamed class. \n");
 	}
 }
 
+static void JNICALL vm_init(
+    jvmtiEnv *jvmti_env,
+    JNIEnv *jni_env,
+    jthread thread
+) {
+	server = ps_init(jvmti, jni_env);
+	if (server == NULL) {
+		fprintf(stderr, "jauto-profiler: ps_init failed\n");
+	}
+}
+
 JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
 {
-	jint ret = (*vm)->GetEnv( vm, (void**)&jvmti, JVMTI_VERSION_1_2);
+	jint ret = (*vm)->GetEnv(vm, (void**)&jvmti, JVMTI_VERSION_1_2);
 
 	if (ret != JNI_OK) {
 		return JNI_ERR;
@@ -55,12 +72,13 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
 	memset(&caps,0,sizeof(caps));
 
 	caps.can_generate_all_class_hook_events = 1;
-	(*jvmti)->AddCapabilities( jvmti, &caps);
+	(*jvmti)->AddCapabilities(jvmti, &caps);
 
 	jvmtiEventCallbacks cb;
 	memset(&cb,0,sizeof(cb));
 
 	cb.ClassFileLoadHook = &class_file_load_hook;
+	cb.VMInit = &vm_init;
 
 	(*jvmti)->SetEventCallbacks(
 		jvmti,
@@ -75,6 +93,13 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
 		NULL
 	);
 
+	(*jvmti)->SetEventNotificationMode(
+		jvmti,
+		JVMTI_ENABLE,
+		JVMTI_EVENT_VM_INIT,
+		NULL
+	);
+
 	printf("agent ready\n");
 
 	return JNI_OK;
@@ -82,5 +107,9 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
 
 JNIEXPORT void JNICALL Agent_OnUnload(JavaVM *vm)
 {
+	if (server != NULL) {
+		ps_destroy(server);
+		server = NULL;
+	}
 	printf("agent unloaded\n");
 }
