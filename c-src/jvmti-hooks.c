@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "prof-server.h"
+#include "prof-server-ev.h"
 
 static jvmtiEnv *jvmti = NULL;
 static struct prof_server *server = NULL;
@@ -40,12 +41,13 @@ static void JNICALL class_file_load_hook(
     unsigned char **new_class_data
 ) {
 	if(name != NULL) {
-		printf("Loaded class: %s\n", name);
 		if (server != NULL) {
 			ps_send_class_loaded(server, name);
+		} else {
+			fprintf(stderr, "server was null at class load\n");
 		}
 	} else {
-		printf("Loaded unamed class. \n");
+		fprintf(stderr, "Loaded unamed class. \n");
 	}
 }
 
@@ -54,9 +56,8 @@ static void JNICALL vm_init(
     JNIEnv *jni_env,
     jthread thread
 ) {
-	server = ps_init(jvmti, jni_env);
-	if (server == NULL) {
-		fprintf(stderr, "jauto-profiler: ps_init failed\n");
+	if (ps_start(server, jvmti_env, jni_env) == NULL) {
+		fprintf(stderr, "jauto-profiler: ps_start failed\n");
 	}
 }
 
@@ -99,6 +100,11 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
 		JVMTI_EVENT_VM_INIT,
 		NULL
 	);
+
+	server = ps_init();
+	if (server == NULL) {
+		return JNI_ERR;
+	}
 
 	printf("agent ready\n");
 

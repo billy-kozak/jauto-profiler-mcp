@@ -15,23 +15,11 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
-#ifndef _PROF_SERVER_H
-#define _PROF_SERVER_H
-
-#include <jvmti.h>
-#include <jni.h>
-#include <stdlib.h>
+#ifndef _PROF_SERVER_EV_H
+#define _PROF_SERVER_EV_H
 
 struct prof_server;
-struct ps_msg;
 
-struct prof_server *ps_init();
-struct prof_server *ps_start(
-	struct prof_server *ps, jvmtiEnv *jvmti, JNIEnv *jni_env
-);
-void ps_destroy(struct prof_server *ps);
 int ps_send_class_loaded(struct prof_server *ps, const char *name);
-int ps_send_ev(struct prof_server *ps, struct ps_msg *msg, size_t size);
 
-#endif /* _PROF_SERVER_H */
+#endif /* _PROF_SERVER_EV_H */

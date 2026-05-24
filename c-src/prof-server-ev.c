@@ -16,22 +16,38 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef _PROF_SERVER_H
-#define _PROF_SERVER_H
+#include "prof-server-ev.h"
+#include "prof-server.h"
+#include "prof-server-msg.h"
 
-#include <jvmti.h>
-#include <jni.h>
 #include <stdlib.h>
+#include <string.h>
 
-struct prof_server;
-struct ps_msg;
+int ps_send_class_loaded(struct prof_server *ps, const char *name)
+{
+	struct ps_msg *msg;
+	char *name_copy;
+	size_t msg_size = sizeof(*msg);
 
-struct prof_server *ps_init();
-struct prof_server *ps_start(
-	struct prof_server *ps, jvmtiEnv *jvmti, JNIEnv *jni_env
-);
-void ps_destroy(struct prof_server *ps);
-int ps_send_class_loaded(struct prof_server *ps, const char *name);
-int ps_send_ev(struct prof_server *ps, struct ps_msg *msg, size_t size);
+	name_copy = strdup(name);
+	if (name_copy == NULL) {
+		return -1;
+	}
 
-#endif /* _PROF_SERVER_H */
+	msg = malloc(sizeof(*msg));
+	if (msg == NULL) {
+		free(name_copy);
+		return -1;
+	}
+
+	msg->type = CLASS_LOADED;
+	msg->body.class_loaded.name = name_copy;
+
+	if (ps_send_ev(ps, msg, msg_size) != 0) {
+		free(name_copy);
+		free(msg);
+		return -1;
+	}
+
+	return 0;
+}
