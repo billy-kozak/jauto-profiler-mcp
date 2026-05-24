@@ -19,8 +19,11 @@
 #define _PROF_SERVER_EV_H
 
 struct prof_server;
+struct user_if_client;
 
 int ps_send_class_loaded(struct prof_server *ps, const char *name);
-int ps_send_usr_rq_loaded_classes(struct prof_server *ps);
+int ps_send_usr_rq_loaded_classes(
+	struct prof_server *ps, struct user_if_client *client
+);
 
 #endif /* _PROF_SERVER_EV_H */

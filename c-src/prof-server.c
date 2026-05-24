@@ -27,6 +27,7 @@
 #include <jvmti.h>
 #include <jni.h>
 #include <semaphore.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -85,8 +86,49 @@ static void handle_usr_rq_loaded_classes(
 	struct prof_server *ps,
 	struct ps_msg *msg
 ) {
-	(void)ps;
+	struct user_if_client *client = msg->body.usr_rq_loaded_classes.client;
+	struct user_msg *response;
+	uint8_t *p;
+	uint32_t body_size;
+	uint32_t count;
+	size_t i;
+
 	free(msg);
+
+	body_size = sizeof(uint32_t);
+	for (i = 0; i < ps->num_loaded_classes; i++) {
+		body_size +=
+			sizeof(uint16_t) + strlen(ps->loaded_classes[i].name);
+	}
+
+	response = malloc(offsetof(struct user_msg, body) + body_size);
+	if (response == NULL) {
+		uif_client_release(client);
+		return;
+	}
+
+	response->type = RESPONSE_LOADED_CLASSES;
+	response->size = body_size;
+
+	p = (uint8_t *)&response->body;
+
+	count = (uint32_t)ps->num_loaded_classes;
+	memcpy(p, &count, sizeof(count));
+	p += sizeof(count);
+
+	for (i = 0; i < ps->num_loaded_classes; i++) {
+		uint16_t name_len = (uint16_t)strlen(
+			ps->loaded_classes[i].name
+		);
+		memcpy(p, &name_len, sizeof(name_len));
+		p += sizeof(name_len);
+		memcpy(p, ps->loaded_classes[i].name, name_len);
+		p += name_len;
+	}
+
+	uif_send(ps->uif, client, response);
+	free(response);
+	uif_client_release(client);
 }
 
 static int dispatch(struct prof_server *ps, void *raw)

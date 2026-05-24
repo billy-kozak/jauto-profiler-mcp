@@ -60,5 +60,9 @@ int uif_send(
 		struct user_if_client *client,
 		const struct user_msg *msg
 );
+void uif_client_acquire(struct user_if_client *client);
+void uif_client_release(struct user_if_client *client);
+void uif_client_set_closed(struct user_if_client *client);
+int uif_client_is_closed(struct user_if_client *client);
 
 #endif /* _USER_IF_H */

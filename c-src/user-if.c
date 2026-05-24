@@ -33,6 +33,7 @@
 #include <stdbool.h>
 
 #include "dyn-arr.h"
+#include "ref-count.h"
 
 #define UIF_LISTEN_BACKLOG  5
 #define UIF_MAX_BODY_SIZE   (1024 * 1024)
@@ -42,10 +43,12 @@
 
 struct user_if_client {
 	int fd;
+	ref_count rc;
+	atomic_int closed;
 };
 
 struct uif_client_ctx {
-	struct user_if_client client;
+	struct user_if_client *client;
 	uint8_t *buf;
 	size_t buf_alloc;
 	size_t buf_expected;
@@ -83,7 +86,7 @@ static struct uif_client_ctx *find_client(struct user_if *uif, int fd)
 	int i;
 
 	for (i = 0; i < DYNARR_LEN(uif->clients); i++) {
-		if (uif->clients.arr[i].client.fd == fd) {
+		if (uif->clients.arr[i].client->fd == fd) {
 			return &uif->clients.arr[i];
 		}
 	}
@@ -92,11 +95,13 @@ static struct uif_client_ctx *find_client(struct user_if *uif, int fd)
 
 static void close_client(struct user_if *uif, struct uif_client_ctx *ctx)
 {
+	struct user_if_client *client = ctx->client;
+	uint8_t *buf = ctx->buf;
 	int i;
 
-	epoll_ctl(uif->epoll_fd, EPOLL_CTL_DEL, ctx->client.fd, NULL);
-	close(ctx->client.fd);
-	free(ctx->buf);
+	uif_client_set_closed(client);
+	epoll_ctl(uif->epoll_fd, EPOLL_CTL_DEL, client->fd, NULL);
+	close(client->fd);
 
 	for (i = 0; i < DYNARR_LEN(uif->clients); i++) {
 		if (&uif->clients.arr[i] == ctx) {
@@ -104,20 +109,27 @@ static void close_client(struct user_if *uif, struct uif_client_ctx *ctx)
 			break;
 		}
 	}
+
+	free(buf);
+	uif_client_release(client);
 }
 
 static void close_all_clients(struct user_if *uif)
 {
 	int i;
 	for (i = 0; i < DYNARR_LEN(uif->clients); i++) {
-		close(uif->clients.arr[i].client.fd);
+		struct user_if_client *client = uif->clients.arr[i].client;
+		uif_client_set_closed(client);
+		close(client->fd);
 		free(uif->clients.arr[i].buf);
+		uif_client_release(client);
 	}
 }
 
 static int accept_client(struct user_if *uif)
 {
 	struct uif_client_ctx *ctx;
+	struct user_if_client *client;
 	struct epoll_event ev;
 	int fd;
 	int i = DYNARR_LEN(uif->clients);
@@ -136,12 +148,20 @@ static int accept_client(struct user_if *uif)
 		goto fail_2;
 	}
 
-	ctx->buf = malloc(UIF_MSG_HDR_SIZE);
-	if (ctx->buf == NULL) {
+	client = malloc(sizeof(*client));
+	if (client == NULL) {
 		goto fail_2;
 	}
+	client->fd = fd;
+	rc_init(&client->rc);
+	atomic_init(&client->closed, 0);
 
-	ctx->client.fd = fd;
+	ctx->buf = malloc(UIF_MSG_HDR_SIZE);
+	if (ctx->buf == NULL) {
+		goto fail_3;
+	}
+
+	ctx->client = client;
 	ctx->buf_alloc = UIF_MSG_HDR_SIZE;
 	ctx->buf_expected = UIF_MSG_HDR_SIZE;
 	ctx->bytes_read = 0;
@@ -150,13 +170,15 @@ static int accept_client(struct user_if *uif)
 	ev.data.fd = fd;
 
 	if (epoll_ctl(uif->epoll_fd, EPOLL_CTL_ADD, fd, &ev) != 0) {
-		goto fail_3;
+		goto fail_4;
 	}
 
 	return 0;
 
-fail_3:
+fail_4:
 	free(ctx->buf);
+fail_3:
+	free(client);
 fail_2:
 	close(fd);
 fail_1:
@@ -176,7 +198,7 @@ static void handle_client_data(
 
 	errno = 0;
 	n = read(
-		ctx->client.fd,
+		ctx->client->fd,
 		ctx->buf + ctx->bytes_read,
 		ctx->buf_expected - ctx->bytes_read
 	);
@@ -219,7 +241,7 @@ static void handle_client_data(
 			uif->handler(
 				uif->handler_data,
 				(struct user_msg *)ctx->buf,
-				&ctx->client
+				ctx->client
 			);
 		}
 		ctx->bytes_read = 0;
@@ -410,7 +432,32 @@ int uif_send(
 	const struct user_msg *msg
 ) {
 	(void)uif;
+	if (uif_client_is_closed(client)) {
+		return -1;
+	}
 	return write_exact(
 		client->fd, msg, UIF_MSG_HDR_SIZE + msg->size
 	);
+}
+
+void uif_client_acquire(struct user_if_client *client)
+{
+	rc_acquire(&client->rc);
+}
+
+void uif_client_release(struct user_if_client *client)
+{
+	if (rc_release(&client->rc) == 0) {
+		free(client);
+	}
+}
+
+void uif_client_set_closed(struct user_if_client *client)
+{
+	atomic_store_explicit(&client->closed, 1, memory_order_release);
+}
+
+int uif_client_is_closed(struct user_if_client *client)
+{
+	return atomic_load_explicit(&client->closed, memory_order_acquire);
 }

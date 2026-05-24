@@ -28,7 +28,7 @@ int ps_uif_handler(
 
 	switch (msg->type) {
 	case REQUEST_LOADED_CLASSES:
-		return ps_send_usr_rq_loaded_classes(ps);
+		return ps_send_usr_rq_loaded_classes(ps, client);
 	default:
 		return -1;
 	}

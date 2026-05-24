@@ -19,6 +19,7 @@
 #include "prof-server-ev.h"
 #include "prof-server.h"
 #include "prof-server-msg.h"
+#include "user-if.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -52,8 +53,9 @@ int ps_send_class_loaded(struct prof_server *ps, const char *name)
 	return 0;
 }
 
-int ps_send_usr_rq_loaded_classes(struct prof_server *ps)
-{
+int ps_send_usr_rq_loaded_classes(
+	struct prof_server *ps, struct user_if_client *client
+) {
 	struct ps_msg *msg;
 
 	msg = malloc(sizeof(*msg));
@@ -61,9 +63,13 @@ int ps_send_usr_rq_loaded_classes(struct prof_server *ps)
 		return -1;
 	}
 
+	uif_client_acquire(client);
+
 	msg->type = USR_RQ_LOADED_CLASSES;
+	msg->body.usr_rq_loaded_classes.client = client;
 
 	if (ps_send_ev(ps, msg, sizeof(*msg)) != 0) {
+		uif_client_release(client);
 		free(msg);
 		return -1;
 	}

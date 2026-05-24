@@ -15,31 +15,27 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef _PROF_SERVER_MSG_H
-#define _PROF_SERVER_MSG_H
+#ifndef _REF_COUNT_H
+#define _REF_COUNT_H
 
-struct user_if_client;
+#include <stdatomic.h>
 
-enum ps_msg_type {
-	CLASS_LOADED,
-	USR_RQ_LOADED_CLASSES,
-	PS_SHUTDOWN,
-};
+typedef _Atomic int ref_count;
 
-struct psm_class_loaded {
-	const char *name;
-};
+static inline void rc_init(ref_count *rc)
+{
+	atomic_init(rc, 1);
+}
 
-struct psm_usr_rq_loaded_classes {
-	struct user_if_client *client;
-};
+static inline void rc_acquire(ref_count *rc)
+{
+	atomic_fetch_add_explicit(rc, 1, memory_order_relaxed);
+}
 
-struct ps_msg {
-	enum ps_msg_type type;
-	union {
-		struct psm_class_loaded class_loaded;
-		struct psm_usr_rq_loaded_classes usr_rq_loaded_classes;
-	} body;
-};
+/* Returns the refcount value after decrement. Caller must free when 0. */
+static inline int rc_release(ref_count *rc)
+{
+	return atomic_fetch_sub_explicit(rc, 1, memory_order_acq_rel) - 1;
+}
 
-#endif /* _PROF_SERVER_MSG_H */
+#endif /* _REF_COUNT_H */
