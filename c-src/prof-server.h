@@ -19,9 +19,12 @@
 #ifndef _PROF_SERVER_H
 #define _PROF_SERVER_H
 
+#include <jvmti.h>
+#include <jni.h>
+
 struct prof_server;
 
-struct prof_server *ps_init(void);
+struct prof_server *ps_init(jvmtiEnv *jvmti, JNIEnv *jni_env);
 void ps_destroy(struct prof_server *ps);
 int ps_send_class_loaded(struct prof_server *ps, const char *name);
 

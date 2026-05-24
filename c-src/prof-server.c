@@ -20,7 +20,9 @@
 
 #include "ev-queue.h"
 
-#include <pthread.h>
+#include <jvmti.h>
+#include <jni.h>
+#include <semaphore.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -48,7 +50,8 @@ struct class_info {
 
 struct prof_server {
 	struct ev_queue *ev_q;
-	pthread_t thread;
+	jvmtiEnv *jvmti;
+	sem_t shutdown_sem;
 	size_t num_loaded_classes;
 	size_t classes_capacity;
 	struct class_info *loaded_classes;
@@ -104,10 +107,13 @@ static int dispatch(struct prof_server *ps, void *raw)
 	return ret;
 }
 
-static void *event_loop(void *arg)
+static void JNICALL event_loop(jvmtiEnv *jvmti_env, JNIEnv *jni_env, void *arg)
 {
 	struct prof_server *ps = arg;
 	void *msg;
+
+	(void)jvmti_env;
+	(void)jni_env;
 
 	for (;;) {
 		evq_wait(ps->ev_q, &msg);
@@ -116,18 +122,23 @@ static void *event_loop(void *arg)
 		}
 	}
 
-	return NULL;
+	sem_post(&ps->shutdown_sem);
 }
 
-struct prof_server *ps_init(void)
+struct prof_server *ps_init(jvmtiEnv *jvmti, JNIEnv *jni_env)
 {
 	struct prof_server *ps;
+	jclass thread_class;
+	jmethodID thread_ctor;
+	jthread thread;
+	jvmtiError err;
 
 	ps = malloc(sizeof(*ps));
 	if (ps == NULL) {
 		return NULL;
 	}
 
+	ps->jvmti = jvmti;
 	ps->num_loaded_classes = 0;
 	ps->classes_capacity = PS_CLASSES_INITIAL_CAP;
 	ps->loaded_classes = malloc(
@@ -137,12 +148,36 @@ struct prof_server *ps_init(void)
 		goto fail;
 	}
 
-	ps->ev_q = evq_init();
-	if (ps->ev_q == NULL) {
+	if (sem_init(&ps->shutdown_sem, 0, 0) != 0) {
 		goto fail_classes;
 	}
 
-	if (pthread_create(&ps->thread, NULL, event_loop, ps) != 0) {
+	ps->ev_q = evq_init();
+	if (ps->ev_q == NULL) {
+		goto fail_sem;
+	}
+
+	thread_class = (*jni_env)->FindClass(jni_env, "java/lang/Thread");
+	if (thread_class == NULL) {
+		goto fail_queue;
+	}
+
+	thread_ctor = (*jni_env)->GetMethodID(
+		jni_env, thread_class, "<init>", "()V"
+	);
+	if (thread_ctor == NULL) {
+		goto fail_queue;
+	}
+
+	thread = (*jni_env)->NewObject(jni_env, thread_class, thread_ctor);
+	if (thread == NULL) {
+		goto fail_queue;
+	}
+
+	err = (*jvmti)->RunAgentThread(
+		jvmti, thread, event_loop, ps, JVMTI_THREAD_NORM_PRIORITY
+	);
+	if (err != JVMTI_ERROR_NONE) {
 		goto fail_queue;
 	}
 
@@ -150,6 +185,8 @@ struct prof_server *ps_init(void)
 
 fail_queue:
 	evq_destroy(ps->ev_q);
+fail_sem:
+	sem_destroy(&ps->shutdown_sem);
 fail_classes:
 	free(ps->loaded_classes);
 fail:
@@ -163,20 +200,21 @@ void ps_destroy(struct prof_server *ps)
 	size_t i;
 
 	shutdown = malloc(sizeof(*shutdown));
-	shutdown->type = PS_SHUTDOWN;
-
-	if (evq_push(ps->ev_q, shutdown, sizeof(*shutdown)) != 0) {
-		free(shutdown);
-		pthread_cancel(ps->thread);
+	if (shutdown != NULL) {
+		shutdown->type = PS_SHUTDOWN;
+		if (evq_push(ps->ev_q, shutdown, sizeof(*shutdown)) != 0) {
+			free(shutdown);
+		}
 	}
 
-	pthread_join(ps->thread, NULL);
+	sem_wait(&ps->shutdown_sem);
 
 	for (i = 0; i < ps->num_loaded_classes; i++) {
 		free(ps->loaded_classes[i].name);
 	}
 	free(ps->loaded_classes);
 
+	sem_destroy(&ps->shutdown_sem);
 	evq_destroy(ps->ev_q);
 	free(ps);
 }
