@@ -25,6 +25,7 @@
 #include <semaphore.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #define PS_CLASSES_INITIAL_CAP 16
 
@@ -61,6 +62,7 @@ static int add_class(struct prof_server *ps, char *name)
 {
 	if (ps->num_loaded_classes == ps->classes_capacity) {
 		size_t new_cap = ps->classes_capacity * 2;
+		fprintf(stderr, "realloc\n");
 		struct class_info *arr = realloc(
 			ps->loaded_classes,
 			new_cap * sizeof(*arr)
@@ -87,6 +89,7 @@ static void handle_class_loaded(
 	if (add_class(ps, name) != 0) {
 		free(name);
 	}
+	free(msg);
 }
 
 static int dispatch(struct prof_server *ps, void *raw)
@@ -97,11 +100,14 @@ static int dispatch(struct prof_server *ps, void *raw)
 	switch (msg->type) {
 	case CLASS_LOADED:
 		handle_class_loaded(ps, msg);
+		break;
 	case PS_SHUTDOWN:
 		free(msg);
 		ret = 0;
+		break;
 	default:
 		free(msg);
+		break;
 	}
 
 	return ret;
