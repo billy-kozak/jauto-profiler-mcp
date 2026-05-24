@@ -77,6 +77,14 @@ static void handle_class_loaded(
 	free(msg);
 }
 
+static void handle_usr_rq_loaded_classes(
+	struct prof_server *ps,
+	struct ps_msg *msg
+) {
+	(void)ps;
+	free(msg);
+}
+
 static int dispatch(struct prof_server *ps, void *raw)
 {
 	struct ps_msg *msg = (struct ps_msg *)raw;
@@ -85,6 +93,9 @@ static int dispatch(struct prof_server *ps, void *raw)
 	switch (msg->type) {
 	case CLASS_LOADED:
 		handle_class_loaded(ps, msg);
+		break;
+	case USR_RQ_LOADED_CLASSES:
+		handle_usr_rq_loaded_classes(ps, msg);
 		break;
 	case PS_SHUTDOWN:
 		free(msg);

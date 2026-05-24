@@ -21,5 +21,6 @@
 struct prof_server;
 
 int ps_send_class_loaded(struct prof_server *ps, const char *name);
+int ps_send_usr_rq_loaded_classes(struct prof_server *ps);
 
 #endif /* _PROF_SERVER_EV_H */

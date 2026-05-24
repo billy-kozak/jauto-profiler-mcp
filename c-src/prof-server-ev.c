@@ -51,3 +51,22 @@ int ps_send_class_loaded(struct prof_server *ps, const char *name)
 
 	return 0;
 }
+
+int ps_send_usr_rq_loaded_classes(struct prof_server *ps)
+{
+	struct ps_msg *msg;
+
+	msg = malloc(sizeof(*msg));
+	if (msg == NULL) {
+		return -1;
+	}
+
+	msg->type = USR_RQ_LOADED_CLASSES;
+
+	if (ps_send_ev(ps, msg, sizeof(*msg)) != 0) {
+		free(msg);
+		return -1;
+	}
+
+	return 0;
+}

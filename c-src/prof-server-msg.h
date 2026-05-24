@@ -20,6 +20,7 @@
 
 enum ps_msg_type {
 	CLASS_LOADED,
+	USR_RQ_LOADED_CLASSES,
 	PS_SHUTDOWN,
 };
 
