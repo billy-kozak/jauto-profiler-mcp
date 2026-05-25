@@ -15,27 +15,29 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef _CLASS_INFO_H
-#define _CLASS_INFO_H
 
-#include "dyn-arr.h"
 #include "pstring.h"
 
-#include <stddef.h>
+#include <string.h>
+#include <stdlib.h>
 
-DYNARR_STRUCT(method_list, struct pstring *)
+struct pstring *pstring_from_cstr(const char *str) {
+	size_t str_len = strlen(str);
 
-int method_list_init(struct method_list *arr, size_t init_cap);
-struct pstring **method_list_add(struct method_list *arr);
-void method_list_remove(struct method_list *arr, int index);
-void method_list_deep_destroy(struct method_list *arr);
+	if(str_len > PSTR_MAX) {
+		return NULL;
+	}
 
-struct class_info {
-	char *name;
-	struct method_list methods;
-};
+	/* Include terminating null so we can still run regular cstring
+	 * functions on the str */
+	struct pstring *ps = malloc(sizeof(*ps) + str_len + 1);
 
-struct class_info *ci_alloc(char *name, struct method_list *methods);
-void ci_free(struct class_info *ci);
+	if(ps == NULL) {
+		return NULL;
+	}
 
-#endif /* _CLASS_INFO_H */
+	ps->size = str_len;
+	memcpy(ps->str, str, str_len + 1);
+
+	return ps;
+}

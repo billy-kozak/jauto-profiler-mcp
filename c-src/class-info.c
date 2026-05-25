@@ -23,7 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-DYNARR_FUNCS(method_list, method_list, char *)
+DYNARR_FUNCS(method_list, method_list, struct pstring *)
 
 void method_list_deep_destroy(struct method_list *arr)
 {

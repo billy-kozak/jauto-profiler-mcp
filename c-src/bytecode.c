@@ -268,7 +268,6 @@ int bc_extract_methods(
 		const char *desc;
 		size_t name_len;
 		size_t desc_len;
-		char *method_str;
 
 		if (pos + 6 > data_len) {
 			goto fail_methods;
@@ -294,22 +293,25 @@ int bc_extract_methods(
 
 		name_len = strlen(name);
 		desc_len = strlen(desc);
-		method_str = malloc(name_len + 1 + desc_len + 1);
-		if (method_str == NULL) {
-			goto fail_methods;
-		}
-		memcpy(method_str, name, name_len);
-		method_str[name_len] = ':';
-		memcpy(method_str + name_len + 1, desc, desc_len);
-		method_str[name_len + 1 + desc_len] = '\0';
-
 		{
-			char **slot = method_list_add(methods);
-			if (slot == NULL) {
-				free(method_str);
+			size_t str_len = name_len + 1 + desc_len;
+			struct pstring *ps = malloc(sizeof(*ps) + str_len);
+			struct pstring **slot;
+
+			if (ps == NULL) {
 				goto fail_methods;
 			}
-			*slot = method_str;
+			ps->size = (uint16_t)str_len;
+			memcpy(ps->str, name, name_len);
+			ps->str[name_len] = ':';
+			memcpy(ps->str + name_len + 1, desc, desc_len);
+
+			slot = method_list_add(methods);
+			if (slot == NULL) {
+				free(ps);
+				goto fail_methods;
+			}
+			*slot = ps;
 		}
 	}
 

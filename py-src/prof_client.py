@@ -27,6 +27,8 @@ DEFAULT_SOCKET_PATH = "/tmp/jauto-profiler.sock"
 
 _MSG_TYPE_REQUEST_LOADED_CLASSES  = 0
 _MSG_TYPE_RESPONSE_LOADED_CLASSES = 1
+_MSG_TYPE_REQUEST_CLASS_METHODS   = 2
+_MSG_TYPE_RESPONSE_CLASS_METHODS  = 3
 
 _HDR_FMT  = "<II"
 _HDR_SIZE = struct.calcsize(_HDR_FMT)
@@ -48,37 +50,64 @@ class ProfClient:
             buf.extend(chunk)
         return bytes(buf)
 
-    def _parse_class_list(self, body: bytes) -> list[str]:
+    def _parse_string_list(self, body: bytes) -> list[str]:
         if len(body) < 4:
             raise ValueError("response body too short")
 
         (count,) = struct.unpack_from("<I", body, 0)
         offset = 4
-        classes = []
+        items = []
 
         for _ in range(count):
             if offset + 2 > len(body):
-                raise ValueError("truncated class entry")
-            (name_len,) = struct.unpack_from("<H", body, offset)
+                raise ValueError("truncated entry")
+            (item_len,) = struct.unpack_from("<H", body, offset)
             offset += 2
-            if offset + name_len > len(body):
-                raise ValueError("truncated class name")
-            classes.append(body[offset:offset + name_len].decode("utf-8", errors="replace"))
-            offset += name_len
+            if offset + item_len > len(body):
+                raise ValueError("truncated string")
+            items.append(body[offset:offset + item_len].decode("utf-8", errors="replace"))
+            offset += item_len
 
-        return classes
+        return items
+
+    def _request_response(
+        self,
+        sock: socket.socket,
+        req_type: int,
+        body: bytes,
+        expected_resp_type: int,
+    ) -> bytes:
+        hdr = struct.pack(_HDR_FMT, req_type, len(body))
+        sock.sendall(hdr + body)
+
+        resp_hdr = self._recv_exact(sock, _HDR_SIZE)
+        resp_type, resp_size = struct.unpack(_HDR_FMT, resp_hdr)
+
+        if resp_type != expected_resp_type:
+            raise ValueError(f"unexpected response type {resp_type}")
+
+        return self._recv_exact(sock, resp_size) if resp_size > 0 else b""
 
     def list_loaded_classes(self) -> list[str]:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
             sock.connect(self._path)
-            sock.sendall(struct.pack(_HDR_FMT, _MSG_TYPE_REQUEST_LOADED_CLASSES, 0))
+            body = self._request_response(
+                sock,
+                _MSG_TYPE_REQUEST_LOADED_CLASSES,
+                b"",
+                _MSG_TYPE_RESPONSE_LOADED_CLASSES,
+            )
+        return self._parse_string_list(body)
 
-            hdr = self._recv_exact(sock, _HDR_SIZE)
-            msg_type, body_size = struct.unpack(_HDR_FMT, hdr)
-
-            if msg_type != _MSG_TYPE_RESPONSE_LOADED_CLASSES:
-                raise ValueError(f"unexpected response type {msg_type}")
-
-            body = self._recv_exact(sock, body_size) if body_size > 0 else b""
-
-        return self._parse_class_list(body)
+    def get_class_methods(self, class_name: str) -> list[str]:
+        name_bytes = class_name.encode("utf-8")
+        req_body = struct.pack("<H", len(name_bytes)) + name_bytes
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.connect(self._path)
+            body = self._request_response(
+                sock,
+                _MSG_TYPE_REQUEST_CLASS_METHODS,
+                req_body,
+                _MSG_TYPE_RESPONSE_CLASS_METHODS,
+            )
+        return self._parse_string_list(body)

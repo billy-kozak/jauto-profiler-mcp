@@ -89,6 +89,56 @@ int ps_send_class_loaded(
 	return 0;
 }
 
+struct ps_msg *ps_usr_rq_class_methods_alloc(
+	struct user_if_client *client, const char *class_name
+) {
+	char *name_copy;
+	struct ps_msg *msg;
+
+	name_copy = strdup(class_name);
+	if (name_copy == NULL) {
+		return NULL;
+	}
+
+	msg = malloc(sizeof(*msg));
+	if (msg == NULL) {
+		free(name_copy);
+		return NULL;
+	}
+
+	uif_client_acquire(client);
+	msg->type = USR_RQ_CLASS_METHODS;
+	msg->body.usr_rq_class_methods.client = client;
+	msg->body.usr_rq_class_methods.class_name = name_copy;
+	return msg;
+}
+
+void ps_usr_rq_class_methods_dealloc(struct ps_msg *msg)
+{
+	uif_client_release(msg->body.usr_rq_class_methods.client);
+	free(msg->body.usr_rq_class_methods.class_name);
+	free(msg);
+}
+
+int ps_send_usr_rq_class_methods(
+	struct prof_server *ps,
+	struct user_if_client *client,
+	const char *class_name
+) {
+	struct ps_msg *msg = ps_usr_rq_class_methods_alloc(client, class_name);
+
+	if (msg == NULL) {
+		return -1;
+	}
+
+	if (ps_send_ev(ps, msg, sizeof(*msg)) != 0) {
+		ps_usr_rq_class_methods_dealloc(msg);
+		return -1;
+	}
+
+	return 0;
+}
+
 int ps_send_usr_rq_loaded_classes(
 	struct prof_server *ps, struct user_if_client *client
 ) {

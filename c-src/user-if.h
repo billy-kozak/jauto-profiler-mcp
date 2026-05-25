@@ -20,24 +20,23 @@
 #define _USER_IF_H
 
 #include <stdint.h>
+
 #include "cc.h"
+#include "pstring.h"
 
 struct user_if;
 struct user_if_client;
 
 enum user_msg_type {
 	REQUEST_LOADED_CLASSES = 0,
-	RESPONSE_LOADED_CLASSES = 1
-};
-
-struct user_msg_string {
-	uint16_t size;
-	unsigned char str[];
+	RESPONSE_LOADED_CLASSES = 1,
+	REQUEST_CLASS_METHODS = 2,
+	RESPONSE_CLASS_METHODS = 3,
 };
 
 struct user_msg_class_list {
 	uint32_t len;
-	struct user_msg_string classes[];
+	struct pstring classes[];
 };
 
 struct PACKED user_msg {
@@ -45,6 +44,8 @@ struct PACKED user_msg {
 	uint32_t size;
 	union {
 		struct user_msg_class_list class_list;
+		struct pstring class_request;
+		uint8_t raw[];
 	} body;
 };
 

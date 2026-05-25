@@ -35,5 +35,14 @@ def get_loaded_classes() -> list[str]:
     return ProfClient().list_loaded_classes()
 
 
+@mcp.tool()
+def get_class_methods(class_name: str) -> list[str]:
+    """Return the methods of a loaded class as 'name:descriptor' strings.
+
+    Returns an empty list if the class has not been loaded or has no methods.
+    """
+    return ProfClient().get_class_methods(class_name)
+
+
 if __name__ == "__main__":
     mcp.run()

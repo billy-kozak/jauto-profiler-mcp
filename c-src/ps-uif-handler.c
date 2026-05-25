@@ -19,6 +19,9 @@
 #include "ps-uif-handler.h"
 #include "prof-server-ev.h"
 
+#include <stdlib.h>
+#include <string.h>
+
 int ps_uif_handler(
 	void *data, struct user_msg *msg, struct user_if_client *client
 ) {
@@ -29,6 +32,29 @@ int ps_uif_handler(
 	switch (msg->type) {
 	case REQUEST_LOADED_CLASSES:
 		return ps_send_usr_rq_loaded_classes(ps, client);
+	case REQUEST_CLASS_METHODS: {
+		uint16_t name_len;
+		char *name;
+		int ret;
+
+		if (msg->size < sizeof(uint16_t)) {
+			return -1;
+		}
+		name_len = msg->body.class_request.size;
+		if (msg->size < (uint32_t)(sizeof(uint16_t) + name_len)) {
+			return -1;
+		}
+		name = malloc((size_t)name_len + 1);
+		if (name == NULL) {
+			return -1;
+		}
+		memcpy(name, msg->body.class_request.str, name_len);
+		name[name_len] = '\0';
+
+		ret = ps_send_usr_rq_class_methods(ps, client, name);
+		free(name);
+		return ret;
+	}
 	default:
 		return -1;
 	}

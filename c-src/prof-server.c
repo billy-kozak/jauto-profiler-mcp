@@ -145,6 +145,60 @@ static void handle_usr_rq_loaded_classes(
 	uif_client_release(client);
 }
 
+static void handle_usr_rq_class_methods(
+	struct prof_server *ps,
+	struct ps_msg *msg
+) {
+	struct user_if_client *client = msg->body.usr_rq_class_methods.client;
+	const char *class_name = msg->body.usr_rq_class_methods.class_name;
+	struct class_info *ci = NULL;
+	struct user_msg *response;
+	uint8_t *p;
+	uint32_t body_size;
+	uint32_t count;
+	size_t i;
+
+	for (i = 0; i < ps->num_loaded_classes; i++) {
+		if (strcmp(ps->loaded_classes[i]->name, class_name) == 0) {
+			ci = ps->loaded_classes[i];
+			break;
+		}
+	}
+
+	body_size = sizeof(uint32_t);
+	if (ci != NULL) {
+		for (i = 0; i < ci->methods.len; i++) {
+			body_size += pstring_total_size(ci->methods.arr[i]);
+		}
+	}
+	count = (ci != NULL) ? (uint32_t)ci->methods.len : 0;
+
+	response = malloc(offsetof(struct user_msg, body) + body_size);
+	if (response == NULL) {
+		ps_usr_rq_class_methods_dealloc(msg);
+		return;
+	}
+
+	response->type = RESPONSE_CLASS_METHODS;
+	response->size = body_size;
+
+	p = response->body.raw;
+	memcpy(p, &count, sizeof(count));
+	p += sizeof(count);
+
+	if (ci != NULL) {
+		for (i = 0; i < ci->methods.len; i++) {
+			size_t sz = pstring_total_size(ci->methods.arr[i]);
+			memcpy(p, ci->methods.arr[i], sz);
+			p += sz;
+		}
+	}
+
+	uif_send(ps->uif, client, response);
+	free(response);
+	ps_usr_rq_class_methods_dealloc(msg);
+}
+
 static int dispatch(struct prof_server *ps, void *raw)
 {
 	struct ps_msg *msg = (struct ps_msg *)raw;
@@ -156,6 +210,9 @@ static int dispatch(struct prof_server *ps, void *raw)
 		break;
 	case USR_RQ_LOADED_CLASSES:
 		handle_usr_rq_loaded_classes(ps, msg);
+		break;
+	case USR_RQ_CLASS_METHODS:
+		handle_usr_rq_class_methods(ps, msg);
 		break;
 	case PS_SHUTDOWN:
 		free(msg);
