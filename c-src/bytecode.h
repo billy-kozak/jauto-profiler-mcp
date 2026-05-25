@@ -20,18 +20,18 @@
 
 #include <stddef.h>
 
+struct method_list;
+
 /*
- * Extract method names and descriptors from a Java class file.
- *
- * On success, *methods_out is a heap-allocated array of heap-allocated
- * strings each in "name:descriptor" form, and *count_out is its length.
- * The caller owns all allocations. Returns 0 on success, -1 on error.
+ * Extract method names and descriptors from a Java class file into methods.
+ * Each entry is a heap-allocated "name:descriptor" string owned by the list.
+ * On error, any strings added are freed and methods->len is reset to 0.
+ * Returns 0 on success, -1 on error.
  */
 int bc_extract_methods(
 	const unsigned char *class_data,
 	size_t class_data_len,
-	char ***methods_out,
-	size_t *count_out
+	struct method_list *methods
 );
 
 #endif /* _BYTECODE_H */

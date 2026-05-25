@@ -18,15 +18,23 @@
 #ifndef _CLASS_INFO_H
 #define _CLASS_INFO_H
 
+#include "dyn-arr.h"
+
 #include <stddef.h>
+
+DYNARR_STRUCT(method_list, char *)
+
+int method_list_init(struct method_list *arr, size_t init_cap);
+char **method_list_add(struct method_list *arr);
+void method_list_remove(struct method_list *arr, int index);
+void method_list_deep_destroy(struct method_list *arr);
 
 struct class_info {
 	char *name;
-	char **methods;
-	size_t num_methods;
+	struct method_list methods;
 };
 
-struct class_info *ci_alloc(char *name, char **methods, size_t num_methods);
+struct class_info *ci_alloc(char *name, struct method_list *methods);
 void ci_free(struct class_info *ci);
 
 #endif /* _CLASS_INFO_H */

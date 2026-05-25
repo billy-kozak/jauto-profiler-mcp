@@ -76,25 +76,21 @@ static void handle_class_loaded(
 	char *name = msg->body.class_loaded.name;
 	unsigned char *bytecode = msg->body.class_loaded.bytecode;
 	size_t bytecode_len = msg->body.class_loaded.bytecode_len;
-	char **methods = NULL;
-	size_t num_methods = 0;
+	struct method_list methods;
 	struct class_info *ci;
-	size_t i;
 
-	bc_extract_methods(bytecode, bytecode_len, &methods, &num_methods);
-
-	ci = ci_alloc(name, methods, num_methods);
-	if (ci == NULL) {
-		for (i = 0; i < num_methods; i++) {
-			free(methods[i]);
-		}
-		free(methods);
-	} else if (add_class(ps, ci) != 0) {
-		ci_free(ci);
+	if (method_list_init(&methods, 0) != 0) {
+		ps_send_class_ev_dealloc(msg);
+		return;
 	}
 
-	for(int i = 0; i < num_methods; i++) {
-		fprintf(stderr, "method %d: %s\n", i, methods[i]);
+	bc_extract_methods(bytecode, bytecode_len, &methods);
+
+	ci = ci_alloc(name, &methods);
+	if (ci == NULL) {
+		method_list_deep_destroy(&methods);
+	} else if (add_class(ps, ci) != 0) {
+		ci_free(ci);
 	}
 
 	ps_send_class_ev_dealloc(msg);

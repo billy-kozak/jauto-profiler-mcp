@@ -17,6 +17,7 @@
  */
 
 #include "bytecode.h"
+#include "class-info.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -162,8 +163,7 @@ static int skip_attributes(
 int bc_extract_methods(
 	const unsigned char *data,
 	size_t data_len,
-	char ***methods_out,
-	size_t *count_out
+	struct method_list *methods
 ) {
 	size_t pos;
 	uint16_t cp_count;
@@ -171,12 +171,7 @@ int bc_extract_methods(
 	uint16_t iface_count;
 	uint16_t field_count;
 	uint16_t method_count;
-	char **methods = NULL;
-	size_t num_methods = 0;
 	int i;
-
-	*methods_out = NULL;
-	*count_out = 0;
 
 	/* magic(4) + minor_version(2) + major_version(2) */
 	if (data_len < 8) {
@@ -274,7 +269,6 @@ int bc_extract_methods(
 		size_t name_len;
 		size_t desc_len;
 		char *method_str;
-		char **new_methods;
 
 		if (pos + 6 > data_len) {
 			goto fail_methods;
@@ -309,31 +303,30 @@ int bc_extract_methods(
 		memcpy(method_str + name_len + 1, desc, desc_len);
 		method_str[name_len + 1 + desc_len] = '\0';
 
-		new_methods = realloc(
-			methods, (num_methods + 1) * sizeof(*methods)
-		);
-		if (new_methods == NULL) {
-			free(method_str);
-			goto fail_methods;
+		{
+			char **slot = method_list_add(methods);
+			if (slot == NULL) {
+				free(method_str);
+				goto fail_methods;
+			}
+			*slot = method_str;
 		}
-		methods = new_methods;
-		methods[num_methods++] = method_str;
 	}
 
 	for (i = 0; i < (int)cp_count; i++) {
 		free((char *)utf8_pool[i]);
 	}
 	free(utf8_pool);
-
-	*methods_out = methods;
-	*count_out = num_methods;
 	return 0;
 
 fail_methods:
-	for (i = 0; i < (int)num_methods; i++) {
-		free(methods[i]);
+	{
+		size_t j;
+		for (j = 0; j < methods->len; j++) {
+			free(methods->arr[j]);
+		}
+		methods->len = 0;
 	}
-	free(methods);
 fail:
 	for (i = 0; i < (int)cp_count; i++) {
 		free((char *)utf8_pool[i]);

@@ -18,10 +18,24 @@
 
 #include "class-info.h"
 
+#include "dyn-arr.h"
+
 #include <stdlib.h>
 #include <string.h>
 
-struct class_info *ci_alloc(char *name, char **methods, size_t num_methods)
+DYNARR_FUNCS(method_list, method_list, char *)
+
+void method_list_deep_destroy(struct method_list *arr)
+{
+	size_t i;
+
+	for (i = 0; i < arr->len; i++) {
+		free(arr->arr[i]);
+	}
+	method_list_destroy(arr);
+}
+
+struct class_info *ci_alloc(char *name, struct method_list *methods)
 {
 	struct class_info *ci = malloc(sizeof(*ci));
 
@@ -29,26 +43,18 @@ struct class_info *ci_alloc(char *name, char **methods, size_t num_methods)
 		return NULL;
 	}
 	ci->name = strdup(name);
-	if(ci->name == NULL) {
-		goto fail;
+	if (ci->name == NULL) {
+		free(ci);
+		return NULL;
 	}
 
-	ci->methods = methods;
-	ci->num_methods = num_methods;
+	ci->methods = *methods;
 	return ci;
-fail:
-	free(ci);
-	return NULL;
 }
 
 void ci_free(struct class_info *ci)
 {
-	size_t i;
-
 	free(ci->name);
-	for (i = 0; i < ci->num_methods; i++) {
-		free(ci->methods[i]);
-	}
-	free(ci->methods);
+	method_list_deep_destroy(&ci->methods);
 	free(ci);
 }

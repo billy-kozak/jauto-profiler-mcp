@@ -32,12 +32,14 @@ void dynarr_remove(void *data, int index, size_t len, size_t elem_size);
 
 #define DYNARR_DEFAULT_INIT_CAPACITY 16
 
-#define DYNARR_TEMPLATE(prefix, name, typ) \
+#define DYNARR_STRUCT(name, typ) \
 	struct name { \
 		size_t len; \
 		size_t capacity; \
 		typ *arr; \
-	}; \
+	};
+
+#define DYNARR_FUNCS(prefix, name, typ) \
 	int prefix##_init(struct name *arr, size_t init_cap) { \
 		arr->len = 0; \
 		if(init_cap <= 0) { \
@@ -58,6 +60,7 @@ void dynarr_remove(void *data, int index, size_t len, size_t elem_size);
 			if(ret != 0) { \
 				return NULL; \
 			} \
+			arr->capacity = new_cap; \
 		} \
 		arr->len += 1; \
 		return arr->arr + arr->len - 1; \
@@ -74,5 +77,9 @@ void dynarr_remove(void *data, int index, size_t len, size_t elem_size);
 		free(arr->arr); \
 		arr->arr = NULL; \
 	}
+
+#define DYNARR_TEMPLATE(prefix, name, typ) \
+	DYNARR_STRUCT(name, typ) \
+	DYNARR_FUNCS(prefix, name, typ)
 
 #endif /* _DYN_ARR_H */
