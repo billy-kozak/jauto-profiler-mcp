@@ -26,6 +26,7 @@
 #include "prof-server-ev.h"
 #include "class-info.h"
 #include "bytecode.h"
+#include "jni-profiler.h"
 
 #include <jvmti.h>
 #include <jni.h>
@@ -201,12 +202,25 @@ static void handle_usr_rq_class_methods(
 
 static void handle_usr_rq_instrument_method(
 	struct prof_server *ps,
+	JNIEnv *jni_env,
 	struct ps_msg *msg
 ) {
 	struct user_if_client *client =
 		msg->body.usr_rq_instrument_method.client;
+	const char *class_name = msg->body.usr_rq_instrument_method.class_name;
+	const char *method_sig = msg->body.usr_rq_instrument_method.method_sig;
 	struct user_msg *response;
-	uint32_t status = 0;
+	uint32_t status;
+	int id;
+
+	id = jni_create_profiler(jni_env, class_name, method_sig);
+	if (id < 0) {
+		fprintf(stderr, "jni_create_profiler failed\n");
+		status = 1;
+	} else {
+		fprintf(stderr, "jni_create_profiler: id=%d\n", id);
+		status = 0;
+	}
 
 	response = malloc(offsetof(struct user_msg, body) + sizeof(status));
 	if (response == NULL) {
@@ -223,7 +237,7 @@ static void handle_usr_rq_instrument_method(
 	ps_usr_rq_instrument_method_dealloc(msg);
 }
 
-static int dispatch(struct prof_server *ps, void *raw)
+static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 {
 	struct ps_msg *msg = (struct ps_msg *)raw;
 	int ret = 1;
@@ -239,7 +253,7 @@ static int dispatch(struct prof_server *ps, void *raw)
 		handle_usr_rq_class_methods(ps, msg);
 		break;
 	case USR_RQ_INSTRUMENT_METHOD:
-		handle_usr_rq_instrument_method(ps, msg);
+		handle_usr_rq_instrument_method(ps, jni_env, msg);
 		break;
 	case PS_SHUTDOWN:
 		free(msg);
@@ -259,11 +273,16 @@ static void JNICALL event_loop(jvmtiEnv *jvmti_env, JNIEnv *jni_env, void *arg)
 	void *msg;
 
 	(void)jvmti_env;
-	(void)jni_env;
+
+	if (jni_profiler_init_refs(jni_env) != 0) {
+		fprintf(stderr, "jauto-profiler: jni_profiler_init_refs failed\n");
+		sem_post(&ps->shutdown_sem);
+		return;
+	}
 
 	for (;;) {
 		evq_wait(ps->ev_q, &msg);
-		if (!dispatch(ps, msg)) {
+		if (!dispatch(ps, jni_env, msg)) {
 			break;
 		}
 	}
