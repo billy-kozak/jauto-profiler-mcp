@@ -32,10 +32,17 @@ void method_list_deep_destroy(struct method_list *arr);
 
 struct class_info {
 	char *name;
+	unsigned char *bytecode;
+	size_t bytecode_len;
 	struct method_list methods;
 };
 
-struct class_info *ci_alloc(char *name, struct method_list *methods);
+struct class_info *ci_alloc(
+	char *name,
+	const unsigned char *bytecode,
+	size_t bytecode_len,
+	struct method_list *methods
+);
 void ci_free(struct class_info *ci);
 
 #endif /* _CLASS_INFO_H */

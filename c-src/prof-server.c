@@ -87,7 +87,7 @@ static void handle_class_loaded(
 
 	bc_extract_methods(bytecode, bytecode_len, &methods);
 
-	ci = ci_alloc(name, &methods);
+	ci = ci_alloc(name, bytecode, bytecode_len, &methods);
 	if (ci == NULL) {
 		method_list_deep_destroy(&methods);
 	} else if (add_class(ps, ci) != 0) {

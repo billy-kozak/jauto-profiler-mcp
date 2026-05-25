@@ -35,8 +35,12 @@ void method_list_deep_destroy(struct method_list *arr)
 	method_list_destroy(arr);
 }
 
-struct class_info *ci_alloc(char *name, struct method_list *methods)
-{
+struct class_info *ci_alloc(
+	char *name,
+	const unsigned char *bytecode,
+	size_t bytecode_len,
+	struct method_list *methods
+) {
 	struct class_info *ci = malloc(sizeof(*ci));
 
 	if (ci == NULL) {
@@ -44,17 +48,28 @@ struct class_info *ci_alloc(char *name, struct method_list *methods)
 	}
 	ci->name = strdup(name);
 	if (ci->name == NULL) {
-		free(ci);
-		return NULL;
+		goto fail;
 	}
-
+	ci->bytecode = malloc(bytecode_len);
+	if (ci->bytecode == NULL) {
+		goto fail_name;
+	}
+	memcpy(ci->bytecode, bytecode, bytecode_len);
+	ci->bytecode_len = bytecode_len;
 	ci->methods = *methods;
 	return ci;
+
+fail_name:
+	free(ci->name);
+fail:
+	free(ci);
+	return NULL;
 }
 
 void ci_free(struct class_info *ci)
 {
 	free(ci->name);
+	free(ci->bytecode);
 	method_list_deep_destroy(&ci->methods);
 	free(ci);
 }
