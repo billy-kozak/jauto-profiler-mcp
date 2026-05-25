@@ -36,6 +36,19 @@ def get_loaded_classes() -> list[str]:
 
 
 @mcp.tool()
+def instrument_method(class_name: str, method_sig: str) -> bool:
+    """Instrument a method for profiling.
+
+    class_name: JVM internal class name (e.g. "app/example/MyClass")
+    method_sig: method signature as returned by get_class_methods,
+                in "name:descriptor" form (e.g. "doWork:(I)V")
+
+    Returns True on success.
+    """
+    return ProfClient().instrument_method(class_name, method_sig)
+
+
+@mcp.tool()
 def get_class_methods(class_name: str) -> list[str]:
     """Return the methods of a loaded class as 'name:descriptor' strings.
 

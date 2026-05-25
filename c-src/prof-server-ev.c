@@ -139,6 +139,71 @@ int ps_send_usr_rq_class_methods(
 	return 0;
 }
 
+struct ps_msg *ps_usr_rq_instrument_method_alloc(
+	struct user_if_client *client,
+	const char *class_name,
+	const char *method_sig
+) {
+	char *class_copy;
+	char *sig_copy;
+	struct ps_msg *msg;
+
+	class_copy = strdup(class_name);
+	if (class_copy == NULL) {
+		return NULL;
+	}
+
+	sig_copy = strdup(method_sig);
+	if (sig_copy == NULL) {
+		free(class_copy);
+		return NULL;
+	}
+
+	msg = malloc(sizeof(*msg));
+	if (msg == NULL) {
+		free(class_copy);
+		free(sig_copy);
+		return NULL;
+	}
+
+	uif_client_acquire(client);
+	msg->type = USR_RQ_INSTRUMENT_METHOD;
+	msg->body.usr_rq_instrument_method.client = client;
+	msg->body.usr_rq_instrument_method.class_name = class_copy;
+	msg->body.usr_rq_instrument_method.method_sig = sig_copy;
+	return msg;
+}
+
+void ps_usr_rq_instrument_method_dealloc(struct ps_msg *msg)
+{
+	uif_client_release(msg->body.usr_rq_instrument_method.client);
+	free(msg->body.usr_rq_instrument_method.class_name);
+	free(msg->body.usr_rq_instrument_method.method_sig);
+	free(msg);
+}
+
+int ps_send_usr_rq_instrument_method(
+	struct prof_server *ps,
+	struct user_if_client *client,
+	const char *class_name,
+	const char *method_sig
+) {
+	struct ps_msg *msg = ps_usr_rq_instrument_method_alloc(
+		client, class_name, method_sig
+	);
+
+	if (msg == NULL) {
+		return -1;
+	}
+
+	if (ps_send_ev(ps, msg, sizeof(*msg)) != 0) {
+		ps_usr_rq_instrument_method_dealloc(msg);
+		return -1;
+	}
+
+	return 0;
+}
+
 int ps_send_usr_rq_loaded_classes(
 	struct prof_server *ps, struct user_if_client *client
 ) {

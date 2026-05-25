@@ -51,4 +51,17 @@ int ps_send_usr_rq_class_methods(
 	const char *class_name
 );
 
+struct ps_msg *ps_usr_rq_instrument_method_alloc(
+	struct user_if_client *client,
+	const char *class_name,
+	const char *method_sig
+);
+void ps_usr_rq_instrument_method_dealloc(struct ps_msg *msg);
+int ps_send_usr_rq_instrument_method(
+	struct prof_server *ps,
+	struct user_if_client *client,
+	const char *class_name,
+	const char *method_sig
+);
+
 #endif /* _PROF_SERVER_EV_H */

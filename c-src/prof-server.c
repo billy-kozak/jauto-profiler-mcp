@@ -199,6 +199,30 @@ static void handle_usr_rq_class_methods(
 	ps_usr_rq_class_methods_dealloc(msg);
 }
 
+static void handle_usr_rq_instrument_method(
+	struct prof_server *ps,
+	struct ps_msg *msg
+) {
+	struct user_if_client *client =
+		msg->body.usr_rq_instrument_method.client;
+	struct user_msg *response;
+	uint32_t status = 0;
+
+	response = malloc(offsetof(struct user_msg, body) + sizeof(status));
+	if (response == NULL) {
+		ps_usr_rq_instrument_method_dealloc(msg);
+		return;
+	}
+
+	response->type = RESPONSE_INSTRUMENT_METHOD;
+	response->size = sizeof(status);
+	memcpy(response->body.raw, &status, sizeof(status));
+
+	uif_send(ps->uif, client, response);
+	free(response);
+	ps_usr_rq_instrument_method_dealloc(msg);
+}
+
 static int dispatch(struct prof_server *ps, void *raw)
 {
 	struct ps_msg *msg = (struct ps_msg *)raw;
@@ -213,6 +237,9 @@ static int dispatch(struct prof_server *ps, void *raw)
 		break;
 	case USR_RQ_CLASS_METHODS:
 		handle_usr_rq_class_methods(ps, msg);
+		break;
+	case USR_RQ_INSTRUMENT_METHOD:
+		handle_usr_rq_instrument_method(ps, msg);
 		break;
 	case PS_SHUTDOWN:
 		free(msg);

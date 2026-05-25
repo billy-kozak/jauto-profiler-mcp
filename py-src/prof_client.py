@@ -27,8 +27,10 @@ DEFAULT_SOCKET_PATH = "/tmp/jauto-profiler.sock"
 
 _MSG_TYPE_REQUEST_LOADED_CLASSES  = 0
 _MSG_TYPE_RESPONSE_LOADED_CLASSES = 1
-_MSG_TYPE_REQUEST_CLASS_METHODS   = 2
-_MSG_TYPE_RESPONSE_CLASS_METHODS  = 3
+_MSG_TYPE_REQUEST_CLASS_METHODS    = 2
+_MSG_TYPE_RESPONSE_CLASS_METHODS   = 3
+_MSG_TYPE_REQUEST_INSTRUMENT_METHOD  = 4
+_MSG_TYPE_RESPONSE_INSTRUMENT_METHOD = 5
 
 _HDR_FMT  = "<II"
 _HDR_SIZE = struct.calcsize(_HDR_FMT)
@@ -98,6 +100,26 @@ class ProfClient:
                 _MSG_TYPE_RESPONSE_LOADED_CLASSES,
             )
         return self._parse_string_list(body)
+
+    def instrument_method(self, class_name: str, method_sig: str) -> bool:
+        name_bytes = class_name.encode("utf-8")
+        sig_bytes = method_sig.encode("utf-8")
+        req_body = (
+            struct.pack("<H", len(name_bytes)) + name_bytes +
+            struct.pack("<H", len(sig_bytes)) + sig_bytes
+        )
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.connect(self._path)
+            body = self._request_response(
+                sock,
+                _MSG_TYPE_REQUEST_INSTRUMENT_METHOD,
+                req_body,
+                _MSG_TYPE_RESPONSE_INSTRUMENT_METHOD,
+            )
+        if len(body) < 4:
+            raise ValueError("instrument_method response too short")
+        (status,) = struct.unpack_from("<I", body, 0)
+        return status == 0
 
     def get_class_methods(self, class_name: str) -> list[str]:
         name_bytes = class_name.encode("utf-8")
