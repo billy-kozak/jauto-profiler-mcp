@@ -210,6 +210,76 @@ static void handle_usr_rq_class_methods(
 	ps_usr_rq_class_methods_dealloc(msg);
 }
 
+static unsigned char *parse_and_instrument(
+	const struct class_info *ci,
+	const char *method_sig,
+	int profiler_id,
+	size_t *new_bc_len_out
+) {
+	const char *colon = strchr(method_sig, ':');
+	size_t name_len;
+	char *method_name;
+	const char *method_desc;
+	unsigned char *new_bc;
+
+	if (colon == NULL) {
+		fprintf(stderr, "jauto-profiler: malformed method_sig\n");
+		return NULL;
+	}
+
+	name_len = (size_t)(colon - method_sig);
+	method_name = malloc(name_len + 1);
+	if (method_name == NULL) {
+		return NULL;
+	}
+	memcpy(method_name, method_sig, name_len);
+	method_name[name_len] = '\0';
+	method_desc = colon + 1;
+
+	new_bc = bc_instrument_method(
+		ci->bytecode, ci->bytecode_len,
+		method_name, method_desc, profiler_id, new_bc_len_out
+	);
+	free(method_name);
+
+	if (new_bc == NULL) {
+		fprintf(stderr, "jauto-profiler: bc_instrument_method failed\n");
+	}
+
+	return new_bc;
+}
+
+static int retransform_pending(
+	struct prof_server *ps,
+	JNIEnv *jni_env,
+	const char *class_name,
+	const char *method_sig,
+	const unsigned char *new_bc,
+	size_t new_bc_len,
+	int profiler_id
+) {
+	int ret;
+
+	ps->pending.class_name   = class_name;
+	ps->pending.method_sig   = method_sig;
+	ps->pending.bytecode     = new_bc;
+	ps->pending.bytecode_len = new_bc_len;
+	ps->pending.profiler_id  = profiler_id;
+
+	ret = jni_retransform_class(jni_env, ps->jvmti, class_name);
+	if (ret != 0) {
+		fprintf(stderr, "jauto-profiler: RetransformClasses failed\n");
+	}
+
+	ps->pending.class_name   = NULL;
+	ps->pending.method_sig   = NULL;
+	ps->pending.bytecode     = NULL;
+	ps->pending.bytecode_len = 0;
+	ps->pending.profiler_id  = -1;
+
+	return ret;
+}
+
 static void handle_usr_rq_instrument_method(
 	struct prof_server *ps,
 	JNIEnv *jni_env,
@@ -223,6 +293,8 @@ static void handle_usr_rq_instrument_method(
 
 	struct user_msg *response;
 	struct class_info *ci = NULL;
+	unsigned char *new_bc = NULL;
+	size_t new_bc_len;
 	uint32_t status = 0;
 	int id;
 	size_t i;
@@ -246,62 +318,21 @@ static void handle_usr_rq_instrument_method(
 		goto respond;
 	}
 
-	{
-		const char *colon = strchr(method_sig, ':');
-		size_t name_len;
-		char *method_name;
-		const char *method_desc;
-		unsigned char *new_bc;
-		size_t new_bc_len;
-
-		if (colon == NULL) {
-			fprintf(stderr, "jauto-profiler: malformed method_sig\n");
-			status = 1;
-			goto respond;
-		}
-
-		name_len = (size_t)(colon - method_sig);
-		method_name = malloc(name_len + 1);
-		if (method_name == NULL) {
-			status = 1;
-			goto respond;
-		}
-		memcpy(method_name, method_sig, name_len);
-		method_name[name_len] = '\0';
-		method_desc = colon + 1;
-
-		new_bc = bc_instrument_method(
-			ci->bytecode, ci->bytecode_len,
-			method_name, method_desc, id, &new_bc_len
-		);
-		free(method_name);
-
-		if (new_bc == NULL) {
-			fprintf(stderr, "jauto-profiler: bc_instrument_method failed\n");
-			status = 1;
-			goto respond;
-		}
-		printf("jauto-profiler: bc_instrument_method ok, new_bc_len=%zu\n", new_bc_len);
-		fflush(stdout);
-
-		ps->pending.class_name   = ci->name;
-		ps->pending.method_sig   = method_sig;
-		ps->pending.bytecode     = new_bc;
-		ps->pending.bytecode_len = new_bc_len;
-		ps->pending.profiler_id  = id;
-
-		if (jni_retransform_class(jni_env, ps->jvmti, class_name) != 0) {
-			fprintf(stderr, "jauto-profiler: RetransformClasses failed\n");
-			status = 1;
-		}
-
-		free(new_bc);
-		ps->pending.class_name   = NULL;
-		ps->pending.method_sig   = NULL;
-		ps->pending.bytecode     = NULL;
-		ps->pending.bytecode_len = 0;
-		ps->pending.profiler_id  = -1;
+	new_bc = parse_and_instrument(ci, method_sig, id, &new_bc_len);
+	if (new_bc == NULL) {
+		status = 1;
+		goto respond;
 	}
+	printf("jauto-profiler: bc_instrument_method ok, new_bc_len=%zu\n", new_bc_len);
+	fflush(stdout);
+
+	if (retransform_pending(
+		ps, jni_env, class_name, method_sig, new_bc, new_bc_len, id
+	) != 0) {
+		status = 1;
+	}
+
+	free(new_bc);
 
 respond:
 	response = malloc(offsetof(struct user_msg, body) + sizeof(status));
