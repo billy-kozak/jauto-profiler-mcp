@@ -57,5 +57,22 @@ def get_class_methods(class_name: str) -> list[str]:
     return ProfClient().get_class_methods(class_name)
 
 
+@mcp.tool()
+def get_profiler_stats() -> list[dict]:
+    """Return profiling statistics for all instrumented methods.
+
+    Each entry contains:
+      class_name  - JVM internal class name
+      method_sig  - method signature in "name:descriptor" form
+      snapshots   - list of per-second snapshots in chronological order,
+                    each with timestamp (Unix seconds), call_count
+                    (cumulative), and total_nanos (cumulative).
+
+    Diff any two snapshots to get call rate and CPU time for that interval.
+    Up to 3600 seconds (one hour) of history is retained per method.
+    """
+    return ProfClient().get_stats()
+
+
 if __name__ == "__main__":
     mcp.run()

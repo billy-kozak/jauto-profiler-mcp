@@ -18,6 +18,10 @@
 
 package app.autoprofiler;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 class ProfilerEntry {
 
 	static final int RING_BUFFER_SIZE = 3600;
@@ -30,10 +34,23 @@ class ProfilerEntry {
 		this.profiler = profiler;
 	}
 
-	void record(long timestamp) {
+	synchronized void record(long timestamp) {
 		buffer[head] = new ProfilerSnapshot(
 			timestamp, profiler.getCallCount(), profiler.getTotalNanos()
 		);
 		head = (head + 1) % RING_BUFFER_SIZE;
+	}
+
+	ProfilerSnapshot[] getOrderedSnapshots() {
+		List<ProfilerSnapshot> result = new ArrayList<>(RING_BUFFER_SIZE);
+		synchronized (this) {
+			for (ProfilerSnapshot snap : buffer) {
+				if (snap != null) {
+					result.add(snap);
+				}
+			}
+		}
+		Collections.sort(result);
+		return result.toArray(new ProfilerSnapshot[0]);
 	}
 }

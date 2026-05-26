@@ -227,3 +227,27 @@ int ps_send_usr_rq_loaded_classes(
 
 	return 0;
 }
+
+int ps_send_usr_rq_get_stats(
+	struct prof_server *ps, struct user_if_client *client
+) {
+	struct ps_msg *msg;
+
+	msg = malloc(sizeof(*msg));
+	if (msg == NULL) {
+		return -1;
+	}
+
+	uif_client_acquire(client);
+
+	msg->type = USR_RQ_GET_STATS;
+	msg->body.usr_rq_get_stats.client = client;
+
+	if (ps_send_ev(ps, msg, sizeof(*msg)) != 0) {
+		uif_client_release(client);
+		free(msg);
+		return -1;
+	}
+
+	return 0;
+}

@@ -27,6 +27,7 @@ enum ps_msg_type {
 	USR_RQ_LOADED_CLASSES,
 	USR_RQ_CLASS_METHODS,
 	USR_RQ_INSTRUMENT_METHOD,
+	USR_RQ_GET_STATS,
 	PS_SHUTDOWN,
 };
 
@@ -51,6 +52,10 @@ struct psm_usr_rq_instrument_method {
 	char *method_sig;
 };
 
+struct psm_usr_rq_get_stats {
+	struct user_if_client *client;
+};
+
 struct ps_msg {
 	enum ps_msg_type type;
 	union {
@@ -58,6 +63,7 @@ struct ps_msg {
 		struct psm_usr_rq_loaded_classes usr_rq_loaded_classes;
 		struct psm_usr_rq_class_methods usr_rq_class_methods;
 		struct psm_usr_rq_instrument_method usr_rq_instrument_method;
+		struct psm_usr_rq_get_stats usr_rq_get_stats;
 	} body;
 };
 

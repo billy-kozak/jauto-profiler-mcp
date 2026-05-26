@@ -384,6 +384,41 @@ void ps_handle_retransform(
 	*new_class_data_len = (jint)ps->pending.bytecode_len;
 }
 
+static void handle_usr_rq_get_stats(
+	struct prof_server *ps,
+	JNIEnv *jni_env,
+	struct ps_msg *msg
+) {
+	struct user_if_client *client = msg->body.usr_rq_get_stats.client;
+	struct user_msg *response;
+	uint8_t *stats_buf = NULL;
+	size_t stats_len = 0;
+
+	free(msg);
+
+	if (jni_get_profiler_stats(jni_env, &stats_buf, &stats_len) != 0) {
+		fprintf(stderr, "jauto-profiler: jni_get_profiler_stats failed\n");
+		uif_client_release(client);
+		return;
+	}
+
+	response = malloc(offsetof(struct user_msg, body) + stats_len);
+	if (response == NULL) {
+		free(stats_buf);
+		uif_client_release(client);
+		return;
+	}
+
+	response->type = RESPONSE_GET_STATS;
+	response->size = (uint32_t)stats_len;
+	memcpy(response->body.raw, stats_buf, stats_len);
+	free(stats_buf);
+
+	uif_send(ps->uif, client, response);
+	free(response);
+	uif_client_release(client);
+}
+
 static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 {
 	struct ps_msg *msg = (struct ps_msg *)raw;
@@ -401,6 +436,9 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 		break;
 	case USR_RQ_INSTRUMENT_METHOD:
 		handle_usr_rq_instrument_method(ps, jni_env, msg);
+		break;
+	case USR_RQ_GET_STATS:
+		handle_usr_rq_get_stats(ps, jni_env, msg);
 		break;
 	case PS_SHUTDOWN:
 		free(msg);

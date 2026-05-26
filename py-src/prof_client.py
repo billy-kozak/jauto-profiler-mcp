@@ -31,6 +31,8 @@ _MSG_TYPE_REQUEST_CLASS_METHODS    = 2
 _MSG_TYPE_RESPONSE_CLASS_METHODS   = 3
 _MSG_TYPE_REQUEST_INSTRUMENT_METHOD  = 4
 _MSG_TYPE_RESPONSE_INSTRUMENT_METHOD = 5
+_MSG_TYPE_REQUEST_GET_STATS          = 6
+_MSG_TYPE_RESPONSE_GET_STATS         = 7
 
 _HDR_FMT  = "<II"
 _HDR_SIZE = struct.calcsize(_HDR_FMT)
@@ -89,6 +91,63 @@ class ProfClient:
             raise ValueError(f"unexpected response type {resp_type}")
 
         return self._recv_exact(sock, resp_size) if resp_size > 0 else b""
+
+    def _parse_stats(self, body: bytes) -> list[dict]:
+        if len(body) < 4:
+            raise ValueError("stats response too short")
+
+        (count,) = struct.unpack_from("<I", body, 0)
+        offset = 4
+        result = []
+
+        for _ in range(count):
+            (class_len,) = struct.unpack_from("<H", body, offset)
+            offset += 2
+            class_name = body[offset:offset + class_len].decode(
+                "utf-8", errors="replace"
+            )
+            offset += class_len
+
+            (sig_len,) = struct.unpack_from("<H", body, offset)
+            offset += 2
+            method_sig = body[offset:offset + sig_len].decode(
+                "utf-8", errors="replace"
+            )
+            offset += sig_len
+
+            (snap_count,) = struct.unpack_from("<I", body, offset)
+            offset += 4
+
+            snapshots = []
+            for _ in range(snap_count):
+                ts, call_count, total_nanos = struct.unpack_from(
+                    "<qqq", body, offset
+                )
+                offset += 24
+                snapshots.append({
+                    "timestamp": ts,
+                    "call_count": call_count,
+                    "total_nanos": total_nanos,
+                })
+
+            result.append({
+                "class_name": class_name,
+                "method_sig": method_sig,
+                "snapshots": snapshots,
+            })
+
+        return result
+
+    def get_stats(self) -> list[dict]:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.connect(self._path)
+            body = self._request_response(
+                sock,
+                _MSG_TYPE_REQUEST_GET_STATS,
+                b"",
+                _MSG_TYPE_RESPONSE_GET_STATS,
+            )
+        return self._parse_stats(body)
 
     def list_loaded_classes(self) -> list[str]:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:

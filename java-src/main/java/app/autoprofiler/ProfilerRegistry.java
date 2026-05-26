@@ -18,6 +18,11 @@
 
 package app.autoprofiler;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 class ProfilerRegistry {
@@ -38,6 +43,41 @@ class ProfilerRegistry {
 		int id = INSTANCE.entries.size();
 		INSTANCE.entries.add(entry);
 		return id;
+	}
+
+	static byte[] getStats() {
+		List<ProfilerEntry> entries = new ArrayList<>(INSTANCE.entries);
+		int n = entries.size();
+
+		byte[][] classNameBytes = new byte[n][];
+		byte[][] methodSigBytes = new byte[n][];
+		ProfilerSnapshot[][] snapshots = new ProfilerSnapshot[n][];
+
+		int totalSize = Integer.BYTES;
+		for (int i = 0; i < n; i++) {
+			classNameBytes[i] = entries.get(i).profiler.className.getBytes(StandardCharsets.UTF_8);
+			methodSigBytes[i] = entries.get(i).profiler.methodSig.getBytes(StandardCharsets.UTF_8);
+			snapshots[i] = entries.get(i).getOrderedSnapshots();
+			totalSize += Short.BYTES + classNameBytes[i].length;
+			totalSize += Short.BYTES + methodSigBytes[i].length;
+			totalSize += Integer.BYTES + snapshots[i].length * (Long.BYTES * 3);
+		}
+
+		ByteBuffer buf = ByteBuffer.allocate(totalSize).order(ByteOrder.LITTLE_ENDIAN);
+		buf.putInt(n);
+		for (int i = 0; i < n; i++) {
+			buf.putShort((short) classNameBytes[i].length);
+			buf.put(classNameBytes[i]);
+			buf.putShort((short) methodSigBytes[i].length);
+			buf.put(methodSigBytes[i]);
+			buf.putInt(snapshots[i].length);
+			for (ProfilerSnapshot snap : snapshots[i]) {
+				buf.putLong(snap.timestamp);
+				buf.putLong(snap.callCount);
+				buf.putLong(snap.totalNanos);
+			}
+		}
+		return buf.array();
 	}
 
 	static void enter(int id) {

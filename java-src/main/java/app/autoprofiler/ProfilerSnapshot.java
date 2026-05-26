@@ -18,7 +18,7 @@
 
 package app.autoprofiler;
 
-class ProfilerSnapshot {
+class ProfilerSnapshot implements Comparable<ProfilerSnapshot> {
 
 	final long timestamp;
 	final long callCount;
@@ -28,5 +28,10 @@ class ProfilerSnapshot {
 		this.timestamp = timestamp;
 		this.callCount = callCount;
 		this.totalNanos = totalNanos;
+	}
+
+	@Override
+	public int compareTo(ProfilerSnapshot other) {
+		return Long.compare(this.timestamp, other.timestamp);
 	}
 }

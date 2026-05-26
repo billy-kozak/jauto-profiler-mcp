@@ -34,6 +34,8 @@ enum user_msg_type {
 	RESPONSE_CLASS_METHODS = 3,
 	REQUEST_INSTRUMENT_METHOD = 4,
 	RESPONSE_INSTRUMENT_METHOD = 5,
+	REQUEST_GET_STATS = 6,
+	RESPONSE_GET_STATS = 7,
 };
 
 struct user_msg_class_list {

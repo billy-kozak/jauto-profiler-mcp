@@ -114,6 +114,8 @@ int ps_uif_handler(
 		return handle_class_methods(ps, client, msg);
 	case REQUEST_INSTRUMENT_METHOD:
 		return handle_instrument_method(ps, client, msg);
+	case REQUEST_GET_STATS:
+		return ps_send_usr_rq_get_stats(ps, client);
 	default:
 		return -1;
 	}

@@ -20,12 +20,17 @@
 
 #include <jni.h>
 #include <jvmti.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdio.h>
 
-#define REGISTRY_CLASS "app/autoprofiler/ProfilerRegistry"
-#define CREATE_SIG     "(Ljava/lang/String;Ljava/lang/String;)I"
+#define REGISTRY_CLASS  "app/autoprofiler/ProfilerRegistry"
+#define CREATE_SIG      "(Ljava/lang/String;Ljava/lang/String;)I"
+#define GET_STATS_SIG   "()[B"
 
 static jclass registry_class = NULL;
 static jmethodID create_method = NULL;
+static jmethodID get_stats_method = NULL;
 
 int jni_profiler_init_refs(JNIEnv *env)
 {
@@ -50,6 +55,15 @@ int jni_profiler_init_refs(JNIEnv *env)
 		env, registry_class, "create", CREATE_SIG
 	);
 	if (create_method == NULL) {
+		(*env)->DeleteGlobalRef(env, registry_class);
+		registry_class = NULL;
+		return -1;
+	}
+
+	get_stats_method = (*env)->GetStaticMethodID(
+		env, registry_class, "getStats", GET_STATS_SIG
+	);
+	if (get_stats_method == NULL) {
 		(*env)->DeleteGlobalRef(env, registry_class);
 		registry_class = NULL;
 		return -1;
@@ -93,6 +107,45 @@ int jni_create_profiler(
 	}
 
 	return (int)result;
+}
+
+int jni_get_profiler_stats(JNIEnv *env, uint8_t **buf_out, size_t *len_out)
+{
+	jbyteArray result;
+	jsize len;
+	uint8_t *buf;
+
+	if (registry_class == NULL) {
+		return -1;
+	}
+
+	result = (*env)->CallStaticObjectMethod(
+		env, registry_class, get_stats_method
+	);
+
+	if ((*env)->ExceptionCheck(env)) {
+		(*env)->ExceptionDescribe(env);
+		(*env)->ExceptionClear(env);
+		return -1;
+	}
+
+	if (result == NULL) {
+		return -1;
+	}
+
+	len = (*env)->GetArrayLength(env, result);
+	buf = malloc((size_t)len);
+	if (buf == NULL) {
+		(*env)->DeleteLocalRef(env, result);
+		return -1;
+	}
+
+	(*env)->GetByteArrayRegion(env, result, 0, len, (jbyte *)buf);
+	(*env)->DeleteLocalRef(env, result);
+
+	*buf_out = buf;
+	*len_out = (size_t)len;
+	return 0;
 }
 
 int jni_retransform_class(
