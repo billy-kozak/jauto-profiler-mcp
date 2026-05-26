@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #define REGISTRY_CLASS  "app/autoprofiler/ProfilerRegistry"
 #define CREATE_SIG      "(Ljava/lang/String;Ljava/lang/String;)I"
@@ -178,19 +179,55 @@ int jni_get_profiler_stats(JNIEnv *env, uint8_t **buf_out, size_t *len_out)
 int jni_retransform_class(
 	JNIEnv *env, jvmtiEnv *jvmti, const char *class_name
 ) {
-	jclass cls;
 	jvmtiError err;
+	jint class_count;
+	jclass *classes;
+	jclass target = NULL;
+	size_t name_len;
+	jint i;
 
-	cls = (*env)->FindClass(env, class_name);
-	if (cls == NULL) {
-		if ((*env)->ExceptionCheck(env)) {
-			(*env)->ExceptionClear(env);
-		}
+	err = (*jvmti)->GetLoadedClasses(jvmti, &class_count, &classes);
+	if (err != JVMTI_ERROR_NONE) {
 		return -1;
 	}
 
-	err = (*jvmti)->RetransformClasses(jvmti, 1, &cls);
-	(*env)->DeleteLocalRef(env, cls);
+	name_len = strlen(class_name);
+
+	for (i = 0; i < class_count; i++) {
+		char *sig = NULL;
+		int match = 0;
+
+		err = (*jvmti)->GetClassSignature(jvmti, classes[i], &sig, NULL);
+		if (err == JVMTI_ERROR_NONE && sig != NULL) {
+			match = (
+				sig[0] == 'L' &&
+				strncmp(sig + 1, class_name, name_len) == 0 &&
+				sig[name_len + 1] == ';'
+			);
+			(*jvmti)->Deallocate(jvmti, (unsigned char *)sig);
+		}
+
+		if (match) {
+			target = (*env)->NewGlobalRef(env, classes[i]);
+			(*env)->DeleteLocalRef(env, classes[i]);
+			i++;
+			break;
+		}
+		(*env)->DeleteLocalRef(env, classes[i]);
+	}
+
+	for (; i < class_count; i++) {
+		(*env)->DeleteLocalRef(env, classes[i]);
+	}
+
+	(*jvmti)->Deallocate(jvmti, (unsigned char *)classes);
+
+	if (target == NULL) {
+		return -1;
+	}
+
+	err = (*jvmti)->RetransformClasses(jvmti, 1, &target);
+	(*env)->DeleteGlobalRef(env, target);
 
 	if (err != JVMTI_ERROR_NONE) {
 		printf("jauto-profiler: RetransformClasses error code: %d\n", (int)err);

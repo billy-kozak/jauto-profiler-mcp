@@ -25,7 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-class ProfilerRegistry {
+public class ProfilerRegistry {
 
 	private static final ProfilerRegistry INSTANCE = new ProfilerRegistry();
 
@@ -98,14 +98,14 @@ class ProfilerRegistry {
 		return buf.array();
 	}
 
-	static void enter(int id) {
+	public static void enter(int id) {
 		ProfilerEntry entry = INSTANCE.entries.get(id);
 		if (entry.profiler.active) {
 			entry.profiler.enter();
 		}
 	}
 
-	static void exit(int id) {
+	public static void exit(int id) {
 		ProfilerEntry entry = INSTANCE.entries.get(id);
 		if (entry.profiler.active) {
 			entry.profiler.exit();
