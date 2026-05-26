@@ -5,7 +5,25 @@ PROJECT_ROOT="$(readlink -f "$SCRIPT_DIR/..")"
 
 JAVA_HOME="$("$PROJECT_ROOT/build-src/find-java-home")"
 
-exec "$JAVA_HOME/bin/java" \
+PID_FILE="/tmp/jauto-prof-test-app.pid"
+LOG_FILE="/tmp/jauto-prof-test-app.log"
+
+
+
+
+"$JAVA_HOME/bin/java" \
 	-agentpath:"${PROJECT_ROOT}/bin/jauto-profiler.so" \
 	-cp "$PROJECT_ROOT/bin/jauto-prof-lib.jar" \
-	app.autoprofiler.TestMain "$@"
+	app.autoprofiler.TestMain "$@" > >(tee "${LOG_FILE}") 2>&1 &
+
+PID=$!
+echo ${PID} > "${PID_FILE}"
+
+exit_hook() {
+	kill ${PID} 2>/dev/null
+	rm "${PID_FILE}"
+	wait ${PID}
+}
+
+trap exit_hook EXIT
+wait ${PID}

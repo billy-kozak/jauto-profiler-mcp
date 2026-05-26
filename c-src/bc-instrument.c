@@ -16,31 +16,25 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package app.autoprofiler;
+#include "bc-instrument.h"
 
-class TestMain {
+#include <string.h>
+#include <stdlib.h>
 
+/* -------------------------------------------------------------------------
+ * Main function
+ * ---------------------------------------------------------------------- */
+unsigned char *bc_instrument_method(
+	const unsigned char *orig,
+	size_t orig_len,
+	const char *method_name,
+	const char *method_desc,
+	int profiler_id,
+	size_t *new_len_out
+) {
+	*new_len_out = orig_len;
 
-	private static void profilerCountdownTest(int count) throws InterruptedException {
-		for (int i = count - 1; i >= 0; i--) {
-			count(i);
-			Thread.sleep(1000);
-		}
-	}
-
-	private static void count(int i) {
-		System.out.println("Countdown " + i);
-	}
-
-	public static void main(String[] args) throws InterruptedException {
-
-		int count;
-
-		if (args.length < 1) {
-			count = 3600 * 24;
-		} else {
-			count = Integer.parseInt(args[0]);
-		}
-		profilerCountdownTest(count);
-	}
+	unsigned char *out = malloc(orig_len);
+	memcpy(out, orig, orig_len);
+	return out;
 }

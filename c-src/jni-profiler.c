@@ -112,5 +112,10 @@ int jni_retransform_class(
 	err = (*jvmti)->RetransformClasses(jvmti, 1, &cls);
 	(*env)->DeleteLocalRef(env, cls);
 
+	if (err != JVMTI_ERROR_NONE) {
+		printf("jauto-profiler: RetransformClasses error code: %d\n", (int)err);
+		fflush(stdout);
+	}
+
 	return (err == JVMTI_ERROR_NONE) ? 0 : -1;
 }

@@ -15,32 +15,24 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+#ifndef _BC_INSTRUMENT_H
+#define _BC_INSTRUMENT_H
 
-package app.autoprofiler;
+#include <stddef.h>
 
-class TestMain {
+/*
+ * Return a heap-allocated transformed copy of class_data with
+ * ProfilerRegistry.enter/exit(profiler_id) injected into the method
+ * identified by method_name and method_desc.  Caller must free() the result.
+ * Returns NULL on error (method not found, malformed class, OOM).
+ */
+unsigned char *bc_instrument_method(
+	const unsigned char *class_data,
+	size_t class_data_len,
+	const char *method_name,
+	const char *method_desc,
+	int profiler_id,
+	size_t *new_len_out
+);
 
-
-	private static void profilerCountdownTest(int count) throws InterruptedException {
-		for (int i = count - 1; i >= 0; i--) {
-			count(i);
-			Thread.sleep(1000);
-		}
-	}
-
-	private static void count(int i) {
-		System.out.println("Countdown " + i);
-	}
-
-	public static void main(String[] args) throws InterruptedException {
-
-		int count;
-
-		if (args.length < 1) {
-			count = 3600 * 24;
-		} else {
-			count = Integer.parseInt(args[0]);
-		}
-		profilerCountdownTest(count);
-	}
-}
+#endif /* _BC_INSTRUMENT_H */
