@@ -20,7 +20,6 @@ package app.autoprofiler;
 
 class TestMain {
 
-
 	private static void profilerCountdownTest(int count) throws InterruptedException {
 		for (int i = count - 1; i >= 0; i--) {
 			count(i);
@@ -29,7 +28,19 @@ class TestMain {
 	}
 
 	private static void count(int i) {
-		System.out.println("Countdown " + i);
+		if((i % 2) == 0) {
+			countEven(i);
+		} else {
+			countOdd(i);
+		}
+	}
+
+	private static void countOdd(int i) {
+		System.out.println("Countdown Odd" + i);
+	}
+
+	private static void countEven(int i) {
+		System.out.println("Countdown Even" + i);
 	}
 
 	public static void main(String[] args) throws InterruptedException {
