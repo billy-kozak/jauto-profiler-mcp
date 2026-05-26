@@ -36,31 +36,30 @@ def get_loaded_classes() -> list[str]:
 
 
 @mcp.tool()
-def instrument_method(class_name: str, method_sig: str) -> int:
+def instrument_method(class_name: str, method_sig: str) -> None:
     """Instrument a method for profiling.
 
     class_name: JVM internal class name (e.g. "app/example/MyClass")
     method_sig: method signature as returned by get_class_methods,
                 in "name:descriptor" form (e.g. "doWork:(I)V")
 
-    Returns the profiler_id (non-negative integer) on success. Pass this id
-    to deinstrument_method to remove instrumentation later. Raises on failure.
+    Raises on failure (including if the method is already instrumented).
     """
-    return ProfClient().instrument_method(class_name, method_sig)
+    ProfClient().instrument_method(class_name, method_sig)
 
 
 @mcp.tool()
-def deinstrument_method(class_name: str, profiler_id: int) -> None:
+def deinstrument_method(class_name: str, method_sig: str) -> None:
     """Remove instrumentation from a previously instrumented method.
 
-    class_name:  JVM internal class name (e.g. "app/example/MyClass")
-    profiler_id: the value returned by instrument_method when this method
-                 was instrumented
+    class_name: JVM internal class name (e.g. "app/example/MyClass")
+    method_sig: method signature in "name:descriptor" form, same value
+                passed to instrument_method (e.g. "doWork:(I)V")
 
     Restores the original bytecode of the class and frees the profiler slot
     so it can be reused. Raises on failure.
     """
-    ProfClient().deinstrument_method(class_name, profiler_id)
+    ProfClient().deinstrument_method(class_name, method_sig)
 
 
 @mcp.tool()

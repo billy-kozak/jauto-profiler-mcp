@@ -30,11 +30,32 @@ struct pstring **method_list_add(struct method_list *arr);
 void method_list_remove(struct method_list *arr, int index);
 void method_list_deep_destroy(struct method_list *arr);
 
+struct instrumented_method {
+	char *method_sig;
+	int profiler_id;
+};
+
+DYNARR_STRUCT(instrumented_method_list, struct instrumented_method)
+
+int instrumented_method_list_init(
+	struct instrumented_method_list *arr, size_t init_cap
+);
+struct instrumented_method *instrumented_method_list_add_and_init(
+	struct instrumented_method_list *arr, const char *method_sig, int id
+);
+void instrumented_method_list_remove_and_destroy(
+	struct instrumented_method_list *im, int index
+);
+void instrumented_method_list_deep_destroy(
+	struct instrumented_method_list *arr
+);
+
 struct class_info {
 	char *name;
 	unsigned char *bytecode;
 	size_t bytecode_len;
 	struct method_list methods;
+	struct instrumented_method_list instrumented;
 };
 
 struct class_info *ci_alloc(

@@ -31,14 +31,14 @@ class BytecodeTransformer {
 
     static byte[] transform(
         byte[] classBytes,
-        String methodName,
-        String methodDesc,
-        int profilerId
+        String[] methodNames,
+        String[] methodDescs,
+        int[] profilerIds
     ) {
         ClassReader cr = new ClassReader(classBytes);
         ClassWriter cw = new SafeClassWriter(cr, ClassWriter.COMPUTE_FRAMES);
         cr.accept(
-            new InstrumentingVisitor(cw, methodName, methodDesc, profilerId),
+            new InstrumentingVisitor(cw, methodNames, methodDescs, profilerIds),
             ClassReader.SKIP_FRAMES
         );
         return cw.toByteArray();
@@ -68,20 +68,20 @@ class BytecodeTransformer {
 
     private static class InstrumentingVisitor extends ClassVisitor {
 
-        private final String targetName;
-        private final String targetDesc;
-        private final int profilerId;
+        private final String[] targetNames;
+        private final String[] targetDescs;
+        private final int[] profilerIds;
 
         InstrumentingVisitor(
             ClassVisitor cv,
-            String targetName,
-            String targetDesc,
-            int profilerId
+            String[] targetNames,
+            String[] targetDescs,
+            int[] profilerIds
         ) {
             super(Opcodes.ASM9, cv);
-            this.targetName = targetName;
-            this.targetDesc = targetDesc;
-            this.profilerId = profilerId;
+            this.targetNames = targetNames;
+            this.targetDescs = targetDescs;
+            this.profilerIds = profilerIds;
         }
 
         @Override
@@ -95,8 +95,10 @@ class BytecodeTransformer {
             MethodVisitor mv = super.visitMethod(
                 access, name, descriptor, signature, exceptions
             );
-            if (name.equals(targetName) && descriptor.equals(targetDesc)) {
-                return new InstrumentingAdapter(mv, profilerId);
+            for (int i = 0; i < targetNames.length; i++) {
+                if (name.equals(targetNames[i]) && descriptor.equals(targetDescs[i])) {
+                    return new InstrumentingAdapter(mv, profilerIds[i]);
+                }
             }
             return mv;
         }

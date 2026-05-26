@@ -210,45 +210,75 @@ static void handle_usr_rq_class_methods(
 	ps_usr_rq_class_methods_dealloc(msg);
 }
 
-static unsigned char *parse_and_instrument(
+static unsigned char *build_instrumented_bytecode(
 	JNIEnv *jni_env,
 	const struct class_info *ci,
-	const char *method_sig,
-	int profiler_id,
 	size_t *new_bc_len_out
 ) {
-	const char *colon = strchr(method_sig, ':');
-	size_t name_len;
-	char *method_name;
-	const char *method_desc;
-	unsigned char *new_bc;
+	int count = (int)ci->instrumented.len;
+	const char **method_names = NULL;
+	const char **method_descs = NULL;
+	int *profiler_ids = NULL;
+	char *name_buf = NULL;
+	unsigned char *result = NULL;
+	size_t total_name_buf = 0;
+	size_t i;
+	char *p;
 
-	if (colon == NULL) {
-		fprintf(stderr, "jauto-profiler: malformed method_sig\n");
-		return NULL;
+	method_names  = malloc((size_t)count * sizeof(*method_names));
+	method_descs  = malloc((size_t)count * sizeof(*method_descs));
+	profiler_ids  = malloc((size_t)count * sizeof(*profiler_ids));
+	if (method_names == NULL || method_descs == NULL || profiler_ids == NULL) {
+		goto cleanup;
 	}
 
-	name_len = (size_t)(colon - method_sig);
-	method_name = malloc(name_len + 1);
-	if (method_name == NULL) {
-		return NULL;
+	for (i = 0; i < (size_t)count; i++) {
+		const char *colon = strchr(ci->instrumented.arr[i].method_sig, ':');
+		if (colon == NULL) {
+			fprintf(
+				stderr,
+				"jauto-profiler: malformed method_sig in instrumented list\n"
+			);
+			goto cleanup;
+		}
+		total_name_buf += (size_t)(colon - ci->instrumented.arr[i].method_sig) + 1;
 	}
-	memcpy(method_name, method_sig, name_len);
-	method_name[name_len] = '\0';
-	method_desc = colon + 1;
 
-	new_bc = bc_instrument_method(
+	name_buf = malloc(total_name_buf);
+	if (name_buf == NULL) {
+		goto cleanup;
+	}
+
+	p = name_buf;
+	for (i = 0; i < (size_t)count; i++) {
+		const char *sig   = ci->instrumented.arr[i].method_sig;
+		const char *colon = strchr(sig, ':');
+		size_t name_len   = (size_t)(colon - sig);
+		memcpy(p, sig, name_len);
+		p[name_len]     = '\0';
+		method_names[i] = p;
+		method_descs[i] = colon + 1;
+		profiler_ids[i] = ci->instrumented.arr[i].profiler_id;
+		p += name_len + 1;
+	}
+
+	result = bc_instrument_method(
 		jni_env,
 		ci->bytecode, ci->bytecode_len,
-		method_name, method_desc, profiler_id, new_bc_len_out
+		method_names, method_descs, profiler_ids, count,
+		new_bc_len_out
 	);
-	free(method_name);
 
-	if (new_bc == NULL) {
+	if (result == NULL) {
 		fprintf(stderr, "jauto-profiler: bc_instrument_method failed\n");
 	}
 
-	return new_bc;
+cleanup:
+	free(name_buf);
+	free(method_names);
+	free(method_descs);
+	free(profiler_ids);
+	return result;
 }
 
 static int retransform_pending(
@@ -292,13 +322,10 @@ static void handle_usr_rq_instrument_method(
 
 	const char *class_name = msg->body.usr_rq_instrument_method.class_name;
 	const char *method_sig = msg->body.usr_rq_instrument_method.method_sig;
-
-	struct {
-		uint32_t status;
-		int32_t profiler_id;
-	} resp_body = { INSTRUMENT_RP_ERROR, -1 };
+	struct user_msg_instr_resp resp_body = {INSTRUMENT_RP_ERROR};
 	struct user_msg *response;
 	struct class_info *ci = NULL;
+	struct instrumented_method *im = NULL;
 	unsigned char *new_bc = NULL;
 	size_t new_bc_len;
 	int id;
@@ -321,27 +348,47 @@ static void handle_usr_rq_instrument_method(
 		}
 	}
 	if (ci == NULL) {
-		fprintf(stderr, "jauto-profiler: class not found: %s\n", class_name);
-		goto respond;
+		fprintf(
+			stderr,
+			"jauto-profiler: class not found: %s\n", class_name
+		);
+		goto fail_cleanup_profiler;
 	}
 
-	new_bc = parse_and_instrument(jni_env, ci, method_sig, id, &new_bc_len);
-	if (new_bc == NULL) {
-		goto respond;
+	im = instrumented_method_list_add_and_init(
+		&ci->instrumented,
+		method_sig,
+		id
+	);
+	if (im == NULL || im->method_sig == NULL) {
+		if (im != NULL) {
+			ci->instrumented.len--;
+		}
+		goto fail_cleanup_profiler;
 	}
-	printf("jauto-profiler: bc_instrument_method ok, new_bc_len=%zu\n", new_bc_len);
-	fflush(stdout);
+
+	new_bc = build_instrumented_bytecode(jni_env, ci, &new_bc_len);
+	if (new_bc == NULL) {
+		goto fail_cleanup_instrumented;
+	}
 
 	if (retransform_pending(
 		ps, jni_env, class_name, method_sig, new_bc, new_bc_len, id
-	) == 0) {
-		resp_body.status = INSTRUMENT_RP_OK;
-		resp_body.profiler_id = (int32_t)id;
+	) != 0) {
+		goto fail_cleanup_instrumented;
 	}
 
-	free(new_bc);
+	resp_body.status = INSTRUMENT_RP_OK;
+	goto respond;
 
+fail_cleanup_instrumented:
+	instrumented_method_list_remove_and_destroy(
+		&ci->instrumented, (int)(ci->instrumented.len - 1)
+	);
+fail_cleanup_profiler:
+	jni_remove_profiler(jni_env, id);
 respond:
+	free(new_bc);
 	response = malloc(offsetof(struct user_msg, body) + sizeof(resp_body));
 	if (response == NULL) {
 		ps_usr_rq_instrument_method_dealloc(msg);
@@ -350,7 +397,7 @@ respond:
 
 	response->type = RESPONSE_INSTRUMENT_METHOD;
 	response->size = sizeof(resp_body);
-	memcpy(response->body.raw, &resp_body, sizeof(resp_body));
+	response->body.instr_rep = resp_body;
 
 	uif_send(ps->uif, client, response);
 	free(response);
@@ -429,15 +476,19 @@ static void handle_usr_rq_deinstrument_method(
 	JNIEnv *jni_env,
 	struct ps_msg *msg
 ) {
-	struct user_if_client *client =
-		msg->body.usr_rq_deinstrument_method.client;
 	const char *class_name =
 		msg->body.usr_rq_deinstrument_method.class_name;
-	int profiler_id = msg->body.usr_rq_deinstrument_method.profiler_id;
+	const char *method_sig =
+		msg->body.usr_rq_deinstrument_method.method_sig;
+	struct user_if_client *client =
+		msg->body.usr_rq_deinstrument_method.client;
 
 	struct user_msg *response;
 	struct class_info *ci = NULL;
-	uint32_t status = 0;
+	unsigned char *new_bc = NULL;
+	size_t new_bc_len;
+	struct user_msg_deinstr_resp resp_body = {DEINSTRUMENT_RP_OK};
+	int profiler_id = -1;
 	size_t i;
 
 	for (i = 0; i < ps->num_loaded_classes; i++) {
@@ -452,41 +503,73 @@ static void handle_usr_rq_deinstrument_method(
 			"jauto-profiler: deinstrument: class not found: %s\n",
 			class_name
 		);
-		status = 1;
+		resp_body.status = DEINSTRUMENT_RP_FAIL;
 		goto respond;
 	}
 
-	ps->pending.class_name   = class_name;
-	ps->pending.method_sig   = NULL;
-	ps->pending.bytecode     = ci->bytecode;
-	ps->pending.bytecode_len = ci->bytecode_len;
-	ps->pending.profiler_id  = -1;
-
-	if (jni_retransform_class(jni_env, ps->jvmti, class_name) != 0) {
-		fprintf(stderr, "jauto-profiler: deinstrument retransform failed\n");
-		status = 1;
+	for (i = 0; i < ci->instrumented.len; i++) {
+		if (strcmp(ci->instrumented.arr[i].method_sig, method_sig) == 0) {
+			profiler_id = ci->instrumented.arr[i].profiler_id;
+			instrumented_method_list_remove_and_destroy(
+				&ci->instrumented, (int)i
+			);
+			break;
+		}
+	}
+	if (profiler_id == -1) {
+		fprintf(
+			stderr,
+			"jauto-profiler: deinstrument: %s not instrumented in %s\n",
+			method_sig, class_name
+		);
+		resp_body.status = DEINSTRUMENT_RP_FAIL;
+		goto respond;
 	}
 
-	ps->pending.class_name   = NULL;
-	ps->pending.method_sig   = NULL;
-	ps->pending.bytecode     = NULL;
-	ps->pending.bytecode_len = 0;
-	ps->pending.profiler_id  = -1;
+	if (ci->instrumented.len > 0) {
+		new_bc = build_instrumented_bytecode(jni_env, ci, &new_bc_len);
+		if (new_bc == NULL) {
+			resp_body.status = DEINSTRUMENT_RP_FAIL;
+			goto cleanup_profiler;
+		}
+		if (retransform_pending(
+			ps, jni_env, class_name, NULL, new_bc, new_bc_len, -1
+		) != 0) {
+			fprintf(
+				stderr,
+				"jauto-profiler: deinstrument retransform failed\n"
+			);
+			resp_body.status = DEINSTRUMENT_RP_FAIL;
+		}
+	} else {
+		if (retransform_pending(
+			ps, jni_env, class_name, NULL,
+			ci->bytecode, ci->bytecode_len, -1
+		) != 0) {
+			fprintf(
+				stderr,
+				"jauto-profiler: deinstrument retransform failed\n"
+			);
+			resp_body.status = DEINSTRUMENT_RP_FAIL;
+		}
+	}
 
+cleanup_profiler:
 	if (jni_remove_profiler(jni_env, profiler_id) != 0) {
 		fprintf(stderr, "jauto-profiler: jni_remove_profiler failed\n");
 	}
 
 respond:
-	response = malloc(offsetof(struct user_msg, body) + sizeof(status));
+	free(new_bc);
+	response = malloc(offsetof(struct user_msg, body) + sizeof(resp_body));
 	if (response == NULL) {
 		ps_usr_rq_deinstrument_method_dealloc(msg);
 		return;
 	}
 
 	response->type = RESPONSE_DEINSTRUMENT_METHOD;
-	response->size = sizeof(status);
-	memcpy(response->body.raw, &status, sizeof(status));
+	response->size = sizeof(resp_body);
+	memcpy(&response->body.deinstr_resp, &resp_body, response->size);
 
 	uif_send(ps->uif, client, response);
 	free(response);

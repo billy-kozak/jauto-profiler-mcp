@@ -231,9 +231,10 @@ int ps_send_usr_rq_loaded_classes(
 struct ps_msg *ps_usr_rq_deinstrument_method_alloc(
 	struct user_if_client *client,
 	const char *class_name,
-	int profiler_id
+	const char *method_sig
 ) {
 	char *name_copy;
+	char *sig_copy;
 	struct ps_msg *msg;
 
 	name_copy = strdup(class_name);
@@ -241,9 +242,16 @@ struct ps_msg *ps_usr_rq_deinstrument_method_alloc(
 		return NULL;
 	}
 
+	sig_copy = strdup(method_sig);
+	if (sig_copy == NULL) {
+		free(name_copy);
+		return NULL;
+	}
+
 	msg = malloc(sizeof(*msg));
 	if (msg == NULL) {
 		free(name_copy);
+		free(sig_copy);
 		return NULL;
 	}
 
@@ -251,7 +259,7 @@ struct ps_msg *ps_usr_rq_deinstrument_method_alloc(
 	msg->type = USR_RQ_DEINSTRUMENT_METHOD;
 	msg->body.usr_rq_deinstrument_method.client = client;
 	msg->body.usr_rq_deinstrument_method.class_name = name_copy;
-	msg->body.usr_rq_deinstrument_method.profiler_id = profiler_id;
+	msg->body.usr_rq_deinstrument_method.method_sig = sig_copy;
 	return msg;
 }
 
@@ -259,6 +267,7 @@ void ps_usr_rq_deinstrument_method_dealloc(struct ps_msg *msg)
 {
 	uif_client_release(msg->body.usr_rq_deinstrument_method.client);
 	free(msg->body.usr_rq_deinstrument_method.class_name);
+	free(msg->body.usr_rq_deinstrument_method.method_sig);
 	free(msg);
 }
 
@@ -266,10 +275,10 @@ int ps_send_usr_rq_deinstrument_method(
 	struct prof_server *ps,
 	struct user_if_client *client,
 	const char *class_name,
-	int profiler_id
+	const char *method_sig
 ) {
 	struct ps_msg *msg = ps_usr_rq_deinstrument_method_alloc(
-		client, class_name, profiler_id
+		client, class_name, method_sig
 	);
 
 	if (msg == NULL) {

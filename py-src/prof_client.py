@@ -162,7 +162,7 @@ class ProfClient:
             )
         return self._parse_string_list(body)
 
-    def instrument_method(self, class_name: str, method_sig: str) -> int:
+    def instrument_method(self, class_name: str, method_sig: str) -> None:
         name_bytes = class_name.encode("utf-8")
         sig_bytes = method_sig.encode("utf-8")
         req_body = (
@@ -177,20 +177,20 @@ class ProfClient:
                 req_body,
                 _MSG_TYPE_RESPONSE_INSTRUMENT_METHOD,
             )
-        if len(body) < 8:
+        if len(body) < 4:
             raise ValueError("instrument_method response too short")
-        status, profiler_id = struct.unpack_from("<Ii", body, 0)
+        (status,) = struct.unpack_from("<I", body, 0)
         if status == 1:
             raise RuntimeError("method is already instrumented")
         if status != 0:
             raise RuntimeError("instrument_method failed")
-        return profiler_id
 
-    def deinstrument_method(self, class_name: str, profiler_id: int) -> None:
+    def deinstrument_method(self, class_name: str, method_sig: str) -> None:
         name_bytes = class_name.encode("utf-8")
+        sig_bytes = method_sig.encode("utf-8")
         req_body = (
             struct.pack("<H", len(name_bytes)) + name_bytes +
-            struct.pack("<i", profiler_id)
+            struct.pack("<H", len(sig_bytes)) + sig_bytes
         )
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
             sock.connect(self._path)

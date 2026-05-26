@@ -60,7 +60,7 @@ struct psm_usr_rq_get_stats {
 struct psm_usr_rq_deinstrument_method {
 	struct user_if_client *client;
 	char *class_name;
-	int profiler_id;
+	char *method_sig;
 };
 
 struct ps_msg {

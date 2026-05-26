@@ -57,9 +57,10 @@ static int handle_deinstrument_method(
 ) {
 	uint8_t *p = msg->body.raw;
 	uint16_t class_len;
-	int32_t profiler_id;
+	uint16_t sig_len;
 	size_t off;
 	char *class_name;
+	char *method_sig;
 	int ret;
 
 	if (msg->size < sizeof(uint16_t)) {
@@ -68,10 +69,15 @@ static int handle_deinstrument_method(
 	memcpy(&class_len, p, sizeof(class_len));
 	off = sizeof(uint16_t) + class_len;
 
-	if (msg->size < (uint32_t)(off + sizeof(int32_t))) {
+	if (msg->size < (uint32_t)(off + sizeof(uint16_t))) {
 		return -1;
 	}
-	memcpy(&profiler_id, p + off, sizeof(profiler_id));
+	memcpy(&sig_len, p + off, sizeof(sig_len));
+	off += sizeof(uint16_t);
+
+	if (msg->size < (uint32_t)(off + sig_len)) {
+		return -1;
+	}
 
 	class_name = malloc((size_t)class_len + 1);
 	if (class_name == NULL) {
@@ -80,10 +86,19 @@ static int handle_deinstrument_method(
 	memcpy(class_name, p + sizeof(uint16_t), class_len);
 	class_name[class_len] = '\0';
 
+	method_sig = malloc((size_t)sig_len + 1);
+	if (method_sig == NULL) {
+		free(class_name);
+		return -1;
+	}
+	memcpy(method_sig, p + off, sig_len);
+	method_sig[sig_len] = '\0';
+
 	ret = ps_send_usr_rq_deinstrument_method(
-		ps, client, class_name, (int)profiler_id
+		ps, client, class_name, method_sig
 	);
 	free(class_name);
+	free(method_sig);
 	return ret;
 }
 

@@ -46,6 +46,19 @@ enum instrument_resp_status {
 	INSTRUMENT_RP_ERROR = 2,
 };
 
+enum deinstrument_resp_status {
+	DEINSTRUMENT_RP_OK = 0,
+	DEINSTRUMENT_RP_FAIL = 1,
+};
+
+struct user_msg_instr_resp {
+	uint32_t status;
+};
+
+struct user_msg_deinstr_resp {
+	uint32_t status;
+};
+
 struct user_msg_class_list {
 	uint32_t len;
 	struct pstring classes[];
@@ -58,6 +71,8 @@ struct PACKED user_msg {
 		struct user_msg_class_list class_list;
 		struct pstring class_request;
 		uint8_t raw[];
+		struct user_msg_instr_resp instr_rep;
+		struct user_msg_deinstr_resp deinstr_resp;
 	} body;
 };
 
