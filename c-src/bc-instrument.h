@@ -19,6 +19,9 @@
 #define _BC_INSTRUMENT_H
 
 #include <stddef.h>
+#include <jni.h>
+
+int bc_instrument_init_refs(JNIEnv *env);
 
 /*
  * Return a heap-allocated transformed copy of class_data with
@@ -27,6 +30,7 @@
  * Returns NULL on error (method not found, malformed class, OOM).
  */
 unsigned char *bc_instrument_method(
+	JNIEnv *env,
 	const unsigned char *class_data,
 	size_t class_data_len,
 	const char *method_name,

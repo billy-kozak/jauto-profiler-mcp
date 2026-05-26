@@ -211,6 +211,7 @@ static void handle_usr_rq_class_methods(
 }
 
 static unsigned char *parse_and_instrument(
+	JNIEnv *jni_env,
 	const struct class_info *ci,
 	const char *method_sig,
 	int profiler_id,
@@ -237,6 +238,7 @@ static unsigned char *parse_and_instrument(
 	method_desc = colon + 1;
 
 	new_bc = bc_instrument_method(
+		jni_env,
 		ci->bytecode, ci->bytecode_len,
 		method_name, method_desc, profiler_id, new_bc_len_out
 	);
@@ -318,7 +320,7 @@ static void handle_usr_rq_instrument_method(
 		goto respond;
 	}
 
-	new_bc = parse_and_instrument(ci, method_sig, id, &new_bc_len);
+	new_bc = parse_and_instrument(jni_env, ci, method_sig, id, &new_bc_len);
 	if (new_bc == NULL) {
 		status = 1;
 		goto respond;
@@ -421,6 +423,12 @@ static void JNICALL event_loop(jvmtiEnv *jvmti_env, JNIEnv *jni_env, void *arg)
 
 	if (jni_profiler_init_refs(jni_env) != 0) {
 		fprintf(stderr, "jauto-profiler: jni_profiler_init_refs failed\n");
+		sem_post(&ps->shutdown_sem);
+		return;
+	}
+
+	if (bc_instrument_init_refs(jni_env) != 0) {
+		fprintf(stderr, "jauto-profiler: bc_instrument_init_refs failed\n");
 		sem_post(&ps->shutdown_sem);
 		return;
 	}

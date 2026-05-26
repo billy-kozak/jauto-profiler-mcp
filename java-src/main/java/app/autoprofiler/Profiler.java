@@ -36,12 +36,10 @@ class Profiler {
 	}
 
 	void enter() {
-		System.out.println("enter " + methodSig);
 		entryTimes.get().push(System.nanoTime());
 	}
 
 	void exit() {
-		System.out.println("exit " + methodSig);
 		Long start = entryTimes.get().poll();
 		if (start == null) {
 			return;
