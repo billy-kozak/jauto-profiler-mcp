@@ -35,7 +35,7 @@ JAVA_HOME = $(shell build-src/find-java-home)
 JAVA_INC = -I$(JAVA_HOME)/include -I$(JAVA_HOME)/include/linux
 
 JAVAC := $(JAVA_HOME)/bin/javac
-JAVACFLAGS :=
+JAVACFLAGS = -cp $(ASM_JAR)
 JAR := $(JAVA_HOME)/bin/jar
 
 LIBS := -lpthread
@@ -47,6 +47,9 @@ OBJ_DIR := build/c/obj
 DEP_DIR := build/c/deps
 JAVA_BUILD_DIR := build/java
 JAR_FILE := $(BUILD_DIR)/jauto-prof-lib.jar
+
+ASM_VERSION := 9.10.1
+ASM_JAR := $(BUILD_DIR)/deps/asm-$(ASM_VERSION).jar
 
 OUTPUT_DIR := bin
 OUT_LIB := $(OUTPUT_DIR)/jauto-profiler.so
@@ -114,11 +117,14 @@ $(OUT_LIB): $(O_FILES) $(OUTPUT_DIR)/.dir_dummy
 
 java: $(JAR_FILE)
 
-$(JAR_FILE): $(CLASS_FILES) $(OUTPUT_DIR)/.dir_dummy
+$(ASM_JAR):
+	JAVA_HOME=$(JAVA_HOME) build-src/download-asm
+
+$(JAR_FILE): $(CLASS_FILES) $(ASM_JAR) $(OUTPUT_DIR)/.dir_dummy
 	$(JAR) cf $@ -C $(JAVA_BUILD_DIR) .
 	cp $@ $(OUTPUT_DIR)/
 
-$(CLASS_FILES): $(JAVA_BUILD_DIR)/%.class: $(JSRC_ROOT)/%.java
+$(CLASS_FILES): $(JAVA_BUILD_DIR)/%.class: $(JSRC_ROOT)/%.java | $(ASM_JAR)
 	@mkdir -p $(dir $(@))
 	$(JAVAC) $(JAVACFLAGS) -d $(JAVA_BUILD_DIR) -sourcepath $(JSRC_ROOT) $<
 

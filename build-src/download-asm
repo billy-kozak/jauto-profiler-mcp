@@ -1,0 +1,55 @@
+#!/bin/bash
+###############################################################################
+# Copyright (C) 2026  Billy Kozak                                             #
+#                                                                             #
+# This file is part of the jauto-profiler program                             #
+#                                                                             #
+# This program is free software: you can redistribute it and/or modify        #
+# it under the terms of the GNU Lesser General Public License as published by #
+# the Free Software Foundation, either version 3 of the License, or           #
+# (at your option) any later version.                                         #
+#                                                                             #
+# This program is distributed in the hope that it will be useful,             #
+# but WITHOUT ANY WARRANTY; without even the implied warranty of              #
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the               #
+# GNU Lesser General Public License for more details.                         #
+#                                                                             #
+# You should have received a copy of the GNU Lesser General Public License    #
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.       #
+###############################################################################
+set -e
+
+ASM_VERSION=9.10.1
+ASM_JAR=asm-${ASM_VERSION}.jar
+ASM_URL=https://repo1.maven.org/maven2/org/ow2/asm/asm/${ASM_VERSION}/${ASM_JAR}
+EXPECTED_SHA256=ed825d10ab1399c8c0cb669e688cf0c8c82629b4c8399b58352b68e92ca10fcb
+
+DEPS_DIR=build/deps
+JAVA_BUILD_DIR=build/java
+JAR_PATH=${DEPS_DIR}/${ASM_JAR}
+
+if [ -n "${JAVA_HOME}" ]; then
+	JAR=${JAVA_HOME}/bin/jar
+else
+	JAR=jar
+fi
+
+mkdir -p "${DEPS_DIR}"
+mkdir -p "${JAVA_BUILD_DIR}"
+
+if [ ! -f "${JAR_PATH}" ]; then
+	echo "Downloading ASM ${ASM_VERSION} from Maven Central..."
+	curl -fSL -o "${JAR_PATH}" "${ASM_URL}"
+fi
+
+ACTUAL_SHA256=$(sha256sum "${JAR_PATH}" | awk '{print $1}')
+if [ "${ACTUAL_SHA256}" != "${EXPECTED_SHA256}" ]; then
+	echo "SHA256 mismatch for ${ASM_JAR}!" >&2
+	echo "  expected: ${EXPECTED_SHA256}" >&2
+	echo "  actual:   ${ACTUAL_SHA256}" >&2
+	rm -f "${JAR_PATH}"
+	exit 1
+fi
+
+ABS_JAR="$(pwd)/${JAR_PATH}"
+(cd "${JAVA_BUILD_DIR}" && "${JAR}" xf "${ABS_JAR}" org/)
