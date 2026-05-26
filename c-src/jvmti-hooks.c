@@ -40,7 +40,21 @@ static void JNICALL class_file_load_hook(
     jint *new_class_data_len,
     unsigned char **new_class_data
 ) {
-	if(name != NULL) {
+	(void)jni_env;
+	(void)loader;
+	(void)protection_domain;
+
+	if (class_being_redefined != NULL) {
+		if (server != NULL && name != NULL) {
+			ps_handle_retransform(
+				server, jvmti_env, name,
+				new_class_data_len, new_class_data
+			);
+		}
+		return;
+	}
+
+	if (name != NULL) {
 		if (server != NULL) {
 			ps_send_class_loaded(
 				server,
@@ -52,7 +66,7 @@ static void JNICALL class_file_load_hook(
 			fprintf(stderr, "server was null at class load\n");
 		}
 	} else {
-		fprintf(stderr, "Loaded unamed class. \n");
+		fprintf(stderr, "Loaded unnamed class.\n");
 	}
 }
 
@@ -78,6 +92,7 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
 	memset(&caps,0,sizeof(caps));
 
 	caps.can_generate_all_class_hook_events = 1;
+	caps.can_retransform_classes = 1;
 	(*jvmti)->AddCapabilities(jvmti, &caps);
 
 	jvmtiEventCallbacks cb;

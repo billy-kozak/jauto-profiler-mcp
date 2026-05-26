@@ -19,10 +19,14 @@
 #define _JNI_PROFILER_H
 
 #include <jni.h>
+#include <jvmti.h>
 
 int jni_profiler_init_refs(JNIEnv *env);
 int jni_create_profiler(
 	JNIEnv *env, const char *class_name, const char *method_sig
+);
+int jni_retransform_class(
+	JNIEnv *env, jvmtiEnv *jvmti, const char *class_name
 );
 
 #endif /* _JNI_PROFILER_H */

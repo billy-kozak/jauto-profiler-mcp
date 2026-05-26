@@ -38,6 +38,14 @@
 
 #define PS_CLASSES_INITIAL_CAP 16
 
+struct pending_instrument {
+	volatile const char *class_name;
+	volatile const char *method_sig;
+	volatile const unsigned char *bytecode;
+	volatile size_t bytecode_len;
+	volatile int profiler_id;
+};
+
 struct prof_server {
 	struct ev_queue *ev_q;
 	struct user_if *uif;
@@ -47,6 +55,7 @@ struct prof_server {
 	size_t classes_capacity;
 	struct class_info **loaded_classes;
 	int thread_running;
+	struct pending_instrument pending;
 };
 
 static int add_class(struct prof_server *ps, struct class_info *ci)
@@ -205,23 +214,55 @@ static void handle_usr_rq_instrument_method(
 	JNIEnv *jni_env,
 	struct ps_msg *msg
 ) {
-	struct user_if_client *client =
-		msg->body.usr_rq_instrument_method.client;
+	struct user_if_client *client = msg->body
+		.usr_rq_instrument_method.client;
+
 	const char *class_name = msg->body.usr_rq_instrument_method.class_name;
 	const char *method_sig = msg->body.usr_rq_instrument_method.method_sig;
+
 	struct user_msg *response;
-	uint32_t status;
+	struct class_info *ci = NULL;
+	uint32_t status = 0;
 	int id;
+	size_t i;
 
 	id = jni_create_profiler(jni_env, class_name, method_sig);
 	if (id < 0) {
-		fprintf(stderr, "jni_create_profiler failed\n");
+		fprintf(stderr, "jauto-profiler: jni_create_profiler failed\n");
 		status = 1;
-	} else {
-		fprintf(stderr, "jni_create_profiler: id=%d\n", id);
-		status = 0;
+		goto respond;
 	}
 
+	for (i = 0; i < ps->num_loaded_classes; i++) {
+		if (strcmp(ps->loaded_classes[i]->name, class_name) == 0) {
+			ci = ps->loaded_classes[i];
+			break;
+		}
+	}
+	if (ci == NULL) {
+		fprintf(stderr, "jauto-profiler: class not found: %s\n", class_name);
+		status = 1;
+		goto respond;
+	}
+
+	ps->pending.class_name  = ci->name;
+	ps->pending.method_sig  = method_sig;
+	ps->pending.bytecode    = ci->bytecode;
+	ps->pending.bytecode_len = ci->bytecode_len;
+	ps->pending.profiler_id = id;
+
+	if (jni_retransform_class(jni_env, ps->jvmti, class_name) != 0) {
+		fprintf(stderr, "jauto-profiler: RetransformClasses failed\n");
+		status = 1;
+	}
+
+	ps->pending.class_name  = NULL;
+	ps->pending.method_sig  = NULL;
+	ps->pending.bytecode    = NULL;
+	ps->pending.bytecode_len = 0;
+	ps->pending.profiler_id = -1;
+
+respond:
 	response = malloc(offsetof(struct user_msg, body) + sizeof(status));
 	if (response == NULL) {
 		ps_usr_rq_instrument_method_dealloc(msg);
@@ -235,6 +276,34 @@ static void handle_usr_rq_instrument_method(
 	uif_send(ps->uif, client, response);
 	free(response);
 	ps_usr_rq_instrument_method_dealloc(msg);
+}
+
+void ps_handle_retransform(
+	struct prof_server *ps,
+	jvmtiEnv *jvmti,
+	const char *name,
+	jint *new_class_data_len,
+	unsigned char **new_class_data
+) {
+	unsigned char *buf;
+	jvmtiError err;
+
+	if (ps->pending.class_name == NULL) {
+		return;
+	}
+	if (strcmp(name, (const char *)ps->pending.class_name) != 0) {
+		return;
+	}
+
+	err = (*jvmti)->Allocate(jvmti, ps->pending.bytecode_len, &buf);
+	if (err != JVMTI_ERROR_NONE) {
+		fprintf(stderr, "jauto-profiler: Allocate failed in retransform\n");
+		return;
+	}
+
+	memcpy(buf, (const void *)ps->pending.bytecode, ps->pending.bytecode_len);
+	*new_class_data = buf;
+	*new_class_data_len = (jint)ps->pending.bytecode_len;
 }
 
 static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
@@ -301,6 +370,7 @@ struct prof_server *ps_init(void)
 
 	ps->jvmti = NULL;
 	ps->thread_running = 0;
+	ps->pending = (struct pending_instrument){0};
 	ps->num_loaded_classes = 0;
 	ps->classes_capacity = PS_CLASSES_INITIAL_CAP;
 	ps->loaded_classes = malloc(

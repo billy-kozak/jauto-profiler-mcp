@@ -32,5 +32,12 @@ struct prof_server *ps_start(
 );
 void ps_destroy(struct prof_server *ps);
 int ps_send_ev(struct prof_server *ps, struct ps_msg *msg, size_t size);
+void ps_handle_retransform(
+	struct prof_server *ps,
+	jvmtiEnv *jvmti,
+	const char *name,
+	jint *new_class_data_len,
+	unsigned char **new_class_data
+);
 
 #endif /* _PROF_SERVER_H */

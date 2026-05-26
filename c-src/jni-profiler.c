@@ -19,6 +19,7 @@
 #include "jni-profiler.h"
 
 #include <jni.h>
+#include <jvmti.h>
 
 #define REGISTRY_CLASS "app/autoprofiler/ProfilerRegistry"
 #define CREATE_SIG     "(Ljava/lang/String;Ljava/lang/String;)I"
@@ -92,4 +93,24 @@ int jni_create_profiler(
 	}
 
 	return (int)result;
+}
+
+int jni_retransform_class(
+	JNIEnv *env, jvmtiEnv *jvmti, const char *class_name
+) {
+	jclass cls;
+	jvmtiError err;
+
+	cls = (*env)->FindClass(env, class_name);
+	if (cls == NULL) {
+		if ((*env)->ExceptionCheck(env)) {
+			(*env)->ExceptionClear(env);
+		}
+		return -1;
+	}
+
+	err = (*jvmti)->RetransformClasses(jvmti, 1, &cls);
+	(*env)->DeleteLocalRef(env, cls);
+
+	return (err == JVMTI_ERROR_NONE) ? 0 : -1;
 }
