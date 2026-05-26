@@ -50,6 +50,43 @@ static int handle_class_methods(
 	return ret;
 }
 
+static int handle_deinstrument_method(
+	struct prof_server *ps,
+	struct user_if_client *client,
+	struct user_msg *msg
+) {
+	uint8_t *p = msg->body.raw;
+	uint16_t class_len;
+	int32_t profiler_id;
+	size_t off;
+	char *class_name;
+	int ret;
+
+	if (msg->size < sizeof(uint16_t)) {
+		return -1;
+	}
+	memcpy(&class_len, p, sizeof(class_len));
+	off = sizeof(uint16_t) + class_len;
+
+	if (msg->size < (uint32_t)(off + sizeof(int32_t))) {
+		return -1;
+	}
+	memcpy(&profiler_id, p + off, sizeof(profiler_id));
+
+	class_name = malloc((size_t)class_len + 1);
+	if (class_name == NULL) {
+		return -1;
+	}
+	memcpy(class_name, p + sizeof(uint16_t), class_len);
+	class_name[class_len] = '\0';
+
+	ret = ps_send_usr_rq_deinstrument_method(
+		ps, client, class_name, (int)profiler_id
+	);
+	free(class_name);
+	return ret;
+}
+
 static int handle_instrument_method(
 	struct prof_server *ps,
 	struct user_if_client *client,
@@ -116,6 +153,8 @@ int ps_uif_handler(
 		return handle_instrument_method(ps, client, msg);
 	case REQUEST_GET_STATS:
 		return ps_send_usr_rq_get_stats(ps, client);
+	case REQUEST_DEINSTRUMENT_METHOD:
+		return handle_deinstrument_method(ps, client, msg);
 	default:
 		return -1;
 	}

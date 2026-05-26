@@ -228,6 +228,62 @@ int ps_send_usr_rq_loaded_classes(
 	return 0;
 }
 
+struct ps_msg *ps_usr_rq_deinstrument_method_alloc(
+	struct user_if_client *client,
+	const char *class_name,
+	int profiler_id
+) {
+	char *name_copy;
+	struct ps_msg *msg;
+
+	name_copy = strdup(class_name);
+	if (name_copy == NULL) {
+		return NULL;
+	}
+
+	msg = malloc(sizeof(*msg));
+	if (msg == NULL) {
+		free(name_copy);
+		return NULL;
+	}
+
+	uif_client_acquire(client);
+	msg->type = USR_RQ_DEINSTRUMENT_METHOD;
+	msg->body.usr_rq_deinstrument_method.client = client;
+	msg->body.usr_rq_deinstrument_method.class_name = name_copy;
+	msg->body.usr_rq_deinstrument_method.profiler_id = profiler_id;
+	return msg;
+}
+
+void ps_usr_rq_deinstrument_method_dealloc(struct ps_msg *msg)
+{
+	uif_client_release(msg->body.usr_rq_deinstrument_method.client);
+	free(msg->body.usr_rq_deinstrument_method.class_name);
+	free(msg);
+}
+
+int ps_send_usr_rq_deinstrument_method(
+	struct prof_server *ps,
+	struct user_if_client *client,
+	const char *class_name,
+	int profiler_id
+) {
+	struct ps_msg *msg = ps_usr_rq_deinstrument_method_alloc(
+		client, class_name, profiler_id
+	);
+
+	if (msg == NULL) {
+		return -1;
+	}
+
+	if (ps_send_ev(ps, msg, sizeof(*msg)) != 0) {
+		ps_usr_rq_deinstrument_method_dealloc(msg);
+		return -1;
+	}
+
+	return 0;
+}
+
 int ps_send_usr_rq_get_stats(
 	struct prof_server *ps, struct user_if_client *client
 ) {

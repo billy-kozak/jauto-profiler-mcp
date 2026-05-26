@@ -293,18 +293,24 @@ static void handle_usr_rq_instrument_method(
 	const char *class_name = msg->body.usr_rq_instrument_method.class_name;
 	const char *method_sig = msg->body.usr_rq_instrument_method.method_sig;
 
+	struct {
+		uint32_t status;
+		int32_t profiler_id;
+	} resp_body = { INSTRUMENT_RP_ERROR, -1 };
 	struct user_msg *response;
 	struct class_info *ci = NULL;
 	unsigned char *new_bc = NULL;
 	size_t new_bc_len;
-	uint32_t status = 0;
 	int id;
 	size_t i;
 
 	id = jni_create_profiler(jni_env, class_name, method_sig);
+	if (id == -1) {
+		resp_body.status = INSTRUMENT_RP_DOUBLE_INSTRUMENT;
+		goto respond;
+	}
 	if (id < 0) {
 		fprintf(stderr, "jauto-profiler: jni_create_profiler failed\n");
-		status = 1;
 		goto respond;
 	}
 
@@ -316,13 +322,11 @@ static void handle_usr_rq_instrument_method(
 	}
 	if (ci == NULL) {
 		fprintf(stderr, "jauto-profiler: class not found: %s\n", class_name);
-		status = 1;
 		goto respond;
 	}
 
 	new_bc = parse_and_instrument(jni_env, ci, method_sig, id, &new_bc_len);
 	if (new_bc == NULL) {
-		status = 1;
 		goto respond;
 	}
 	printf("jauto-profiler: bc_instrument_method ok, new_bc_len=%zu\n", new_bc_len);
@@ -330,22 +334,23 @@ static void handle_usr_rq_instrument_method(
 
 	if (retransform_pending(
 		ps, jni_env, class_name, method_sig, new_bc, new_bc_len, id
-	) != 0) {
-		status = 1;
+	) == 0) {
+		resp_body.status = INSTRUMENT_RP_OK;
+		resp_body.profiler_id = (int32_t)id;
 	}
 
 	free(new_bc);
 
 respond:
-	response = malloc(offsetof(struct user_msg, body) + sizeof(status));
+	response = malloc(offsetof(struct user_msg, body) + sizeof(resp_body));
 	if (response == NULL) {
 		ps_usr_rq_instrument_method_dealloc(msg);
 		return;
 	}
 
 	response->type = RESPONSE_INSTRUMENT_METHOD;
-	response->size = sizeof(status);
-	memcpy(response->body.raw, &status, sizeof(status));
+	response->size = sizeof(resp_body);
+	memcpy(response->body.raw, &resp_body, sizeof(resp_body));
 
 	uif_send(ps->uif, client, response);
 	free(response);
@@ -419,6 +424,75 @@ static void handle_usr_rq_get_stats(
 	uif_client_release(client);
 }
 
+static void handle_usr_rq_deinstrument_method(
+	struct prof_server *ps,
+	JNIEnv *jni_env,
+	struct ps_msg *msg
+) {
+	struct user_if_client *client =
+		msg->body.usr_rq_deinstrument_method.client;
+	const char *class_name =
+		msg->body.usr_rq_deinstrument_method.class_name;
+	int profiler_id = msg->body.usr_rq_deinstrument_method.profiler_id;
+
+	struct user_msg *response;
+	struct class_info *ci = NULL;
+	uint32_t status = 0;
+	size_t i;
+
+	for (i = 0; i < ps->num_loaded_classes; i++) {
+		if (strcmp(ps->loaded_classes[i]->name, class_name) == 0) {
+			ci = ps->loaded_classes[i];
+			break;
+		}
+	}
+	if (ci == NULL) {
+		fprintf(
+			stderr,
+			"jauto-profiler: deinstrument: class not found: %s\n",
+			class_name
+		);
+		status = 1;
+		goto respond;
+	}
+
+	ps->pending.class_name   = class_name;
+	ps->pending.method_sig   = NULL;
+	ps->pending.bytecode     = ci->bytecode;
+	ps->pending.bytecode_len = ci->bytecode_len;
+	ps->pending.profiler_id  = -1;
+
+	if (jni_retransform_class(jni_env, ps->jvmti, class_name) != 0) {
+		fprintf(stderr, "jauto-profiler: deinstrument retransform failed\n");
+		status = 1;
+	}
+
+	ps->pending.class_name   = NULL;
+	ps->pending.method_sig   = NULL;
+	ps->pending.bytecode     = NULL;
+	ps->pending.bytecode_len = 0;
+	ps->pending.profiler_id  = -1;
+
+	if (jni_remove_profiler(jni_env, profiler_id) != 0) {
+		fprintf(stderr, "jauto-profiler: jni_remove_profiler failed\n");
+	}
+
+respond:
+	response = malloc(offsetof(struct user_msg, body) + sizeof(status));
+	if (response == NULL) {
+		ps_usr_rq_deinstrument_method_dealloc(msg);
+		return;
+	}
+
+	response->type = RESPONSE_DEINSTRUMENT_METHOD;
+	response->size = sizeof(status);
+	memcpy(response->body.raw, &status, sizeof(status));
+
+	uif_send(ps->uif, client, response);
+	free(response);
+	ps_usr_rq_deinstrument_method_dealloc(msg);
+}
+
 static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 {
 	struct ps_msg *msg = (struct ps_msg *)raw;
@@ -439,6 +513,9 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 		break;
 	case USR_RQ_GET_STATS:
 		handle_usr_rq_get_stats(ps, jni_env, msg);
+		break;
+	case USR_RQ_DEINSTRUMENT_METHOD:
+		handle_usr_rq_deinstrument_method(ps, jni_env, msg);
 		break;
 	case PS_SHUTDOWN:
 		free(msg);

@@ -25,6 +25,7 @@ class Profiler {
 
 	final String className;
 	final String methodSig;
+	volatile boolean active = true;
 
 	private final AtomicLong callCount = new AtomicLong(0);
 	private final AtomicLong totalNanos = new AtomicLong(0);

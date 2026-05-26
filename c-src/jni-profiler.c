@@ -26,10 +26,12 @@
 
 #define REGISTRY_CLASS  "app/autoprofiler/ProfilerRegistry"
 #define CREATE_SIG      "(Ljava/lang/String;Ljava/lang/String;)I"
+#define REMOVE_SIG      "(I)V"
 #define GET_STATS_SIG   "()[B"
 
 static jclass registry_class = NULL;
 static jmethodID create_method = NULL;
+static jmethodID remove_method = NULL;
 static jmethodID get_stats_method = NULL;
 
 int jni_profiler_init_refs(JNIEnv *env)
@@ -55,21 +57,28 @@ int jni_profiler_init_refs(JNIEnv *env)
 		env, registry_class, "create", CREATE_SIG
 	);
 	if (create_method == NULL) {
-		(*env)->DeleteGlobalRef(env, registry_class);
-		registry_class = NULL;
-		return -1;
+		goto fail;
+	}
+
+	remove_method = (*env)->GetStaticMethodID(
+		env, registry_class, "remove", REMOVE_SIG
+	);
+	if (remove_method == NULL) {
+		goto fail;
 	}
 
 	get_stats_method = (*env)->GetStaticMethodID(
 		env, registry_class, "getStats", GET_STATS_SIG
 	);
 	if (get_stats_method == NULL) {
-		(*env)->DeleteGlobalRef(env, registry_class);
-		registry_class = NULL;
-		return -1;
+		goto fail;
 	}
 
 	return 0;
+fail:
+	(*env)->DeleteGlobalRef(env, registry_class);
+	registry_class = NULL;
+	return -1;
 }
 
 int jni_create_profiler(
@@ -103,10 +112,28 @@ int jni_create_profiler(
 
 	if ((*env)->ExceptionCheck(env)) {
 		(*env)->ExceptionClear(env);
-		return -1;
+		return -2;
 	}
 
 	return (int)result;
+}
+
+int jni_remove_profiler(JNIEnv *env, int profiler_id)
+{
+	if (registry_class == NULL) {
+		return -1;
+	}
+
+	(*env)->CallStaticVoidMethod(
+		env, registry_class, remove_method, (jint)profiler_id
+	);
+
+	if ((*env)->ExceptionCheck(env)) {
+		(*env)->ExceptionClear(env);
+		return -1;
+	}
+
+	return 0;
 }
 
 int jni_get_profiler_stats(JNIEnv *env, uint8_t **buf_out, size_t *len_out)

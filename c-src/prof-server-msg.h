@@ -28,6 +28,7 @@ enum ps_msg_type {
 	USR_RQ_CLASS_METHODS,
 	USR_RQ_INSTRUMENT_METHOD,
 	USR_RQ_GET_STATS,
+	USR_RQ_DEINSTRUMENT_METHOD,
 	PS_SHUTDOWN,
 };
 
@@ -56,6 +57,12 @@ struct psm_usr_rq_get_stats {
 	struct user_if_client *client;
 };
 
+struct psm_usr_rq_deinstrument_method {
+	struct user_if_client *client;
+	char *class_name;
+	int profiler_id;
+};
+
 struct ps_msg {
 	enum ps_msg_type type;
 	union {
@@ -64,6 +71,7 @@ struct ps_msg {
 		struct psm_usr_rq_class_methods usr_rq_class_methods;
 		struct psm_usr_rq_instrument_method usr_rq_instrument_method;
 		struct psm_usr_rq_get_stats usr_rq_get_stats;
+		struct psm_usr_rq_deinstrument_method usr_rq_deinstrument_method;
 	} body;
 };
 

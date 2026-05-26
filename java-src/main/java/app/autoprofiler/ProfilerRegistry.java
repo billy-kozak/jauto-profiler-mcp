@@ -39,15 +39,33 @@ class ProfilerRegistry {
 	}
 
 	synchronized static int create(String className, String methodSig) {
-		ProfilerEntry entry = new ProfilerEntry(new Profiler(className, methodSig));
-		int id = INSTANCE.entries.size();
-		INSTANCE.entries.add(entry);
-		return id;
+		int n = INSTANCE.entries.size();
+		for (int i = 0; i < n; i++) {
+			ProfilerEntry e = INSTANCE.entries.get(i);
+			if (e.profiler.className.equals(className) && e.profiler.methodSig.equals(methodSig)) {
+				if (e.profiler.active) {
+					return -1;
+				}
+				INSTANCE.entries.set(i, new ProfilerEntry(new Profiler(className, methodSig)));
+				return i;
+			}
+		}
+		INSTANCE.entries.add(new ProfilerEntry(new Profiler(className, methodSig)));
+		return n;
+	}
+
+	synchronized static void remove(int id) {
+		INSTANCE.entries.get(id).profiler.active = false;
 	}
 
 	static byte[] getStats() {
-		List<ProfilerEntry> entries = new ArrayList<>(INSTANCE.entries);
-		int n = entries.size();
+		List<ProfilerEntry> snapshot = new ArrayList<>();
+		for (ProfilerEntry e : INSTANCE.entries) {
+			if (e.profiler.active) {
+				snapshot.add(e);
+			}
+		}
+		int n = snapshot.size();
 
 		byte[][] classNameBytes = new byte[n][];
 		byte[][] methodSigBytes = new byte[n][];
@@ -55,9 +73,9 @@ class ProfilerRegistry {
 
 		int totalSize = Integer.BYTES;
 		for (int i = 0; i < n; i++) {
-			classNameBytes[i] = entries.get(i).profiler.className.getBytes(StandardCharsets.UTF_8);
-			methodSigBytes[i] = entries.get(i).profiler.methodSig.getBytes(StandardCharsets.UTF_8);
-			snapshots[i] = entries.get(i).getOrderedSnapshots();
+			classNameBytes[i] = snapshot.get(i).profiler.className.getBytes(StandardCharsets.UTF_8);
+			methodSigBytes[i] = snapshot.get(i).profiler.methodSig.getBytes(StandardCharsets.UTF_8);
+			snapshots[i] = snapshot.get(i).getOrderedSnapshots();
 			totalSize += Short.BYTES + classNameBytes[i].length;
 			totalSize += Short.BYTES + methodSigBytes[i].length;
 			totalSize += Integer.BYTES + snapshots[i].length * (Long.BYTES * 3);
@@ -81,11 +99,17 @@ class ProfilerRegistry {
 	}
 
 	static void enter(int id) {
-		INSTANCE.entries.get(id).profiler.enter();
+		ProfilerEntry entry = INSTANCE.entries.get(id);
+		if (entry.profiler.active) {
+			entry.profiler.enter();
+		}
 	}
 
 	static void exit(int id) {
-		INSTANCE.entries.get(id).profiler.exit();
+		ProfilerEntry entry = INSTANCE.entries.get(id);
+		if (entry.profiler.active) {
+			entry.profiler.exit();
+		}
 	}
 
 	private void collect() {
@@ -98,7 +122,9 @@ class ProfilerRegistry {
 			}
 			long timestamp = System.currentTimeMillis() / 1000;
 			for (ProfilerEntry entry : entries) {
-				entry.record(timestamp);
+				if (entry.profiler.active) {
+					entry.record(timestamp);
+				}
 			}
 		}
 	}
