@@ -23,11 +23,9 @@
 CC := gcc
 LD := gcc
 
-CFLAGS += -Wall -std=gnu23
+CFLAGS += -Wall
 LDFLAGS += -Wall
 
-CFLAGS += -fvisibility=hidden -fPIC -ffunction-sections
-LDFLAGS += -shared -fPIC -Wl,--gc-sections
 
 NO_DEPS_TARGETS += clean directories dir_clean
 
@@ -39,6 +37,20 @@ JAVACFLAGS = -cp $(ASM_JAR)
 JAR := $(JAVA_HOME)/bin/jar
 
 LIBS := -lpthread
+
+HAS_C23 := $(shell \
+	$(CC) -std=gnu23 -dM -E - < /dev/null >/dev/null 2>&1 \
+	&& echo yes || echo no \
+)
+
+ifeq ($(HAS_C23),yes)
+	CFLAGS += -std=gnu23
+else
+	CFLAGS += -std=gnu11
+endif
+
+CFLAGS += -fvisibility=hidden -fPIC -ffunction-sections
+LDFLAGS += -shared -fPIC -Wl,--gc-sections
 ###############################################################################
 #                                 BUILD DIRS                                  #
 ###############################################################################

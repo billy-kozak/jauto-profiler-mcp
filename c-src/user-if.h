@@ -24,6 +24,12 @@
 #include "cc.h"
 #include "pstring.h"
 
+#if __STDC_VERSION__ >= 202300L
+	#define A_FLEX
+#else
+	#define A_FLEX 1
+#endif
+
 struct user_if;
 struct user_if_client;
 
@@ -70,7 +76,7 @@ struct PACKED user_msg {
 	union {
 		struct user_msg_class_list class_list;
 		struct pstring class_request;
-		uint8_t raw[];
+		uint8_t raw[A_FLEX];
 		struct user_msg_instr_resp instr_rep;
 		struct user_msg_deinstr_resp deinstr_resp;
 	} body;
