@@ -127,13 +127,10 @@ from profiler artefacts.
 
 ## Important constraints
 
-- **Call `instrument_method` sequentially, not in parallel.** Each call
-  triggers a JVM retransformation and the socket server processes one request
-  at a time per connection. Firing multiple calls simultaneously does not
-  speed things up and can result in lost connections if the JVM crashes between
-  calls.
 - **`deinstrument_method` frees the profiler slot** so it can be reused.
   Always deinstrument methods you are done with before moving on to a new set.
+  Slots are not especially limited but do consume some memory. Unnecesarry profiler
+  instrumentation also slows down the application.
 - **Class names use JVM internal format**: slashes, not dots, and `$` for
   inner classes (e.g. `org/example/Outer$Inner`, not `org.example.Outer.Inner`).
 - **Method signatures come from `get_class_methods`** — always copy them
