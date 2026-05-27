@@ -18,7 +18,6 @@
 
 package app.autoprofiler;
 
-import java.util.ArrayDeque;
 import java.util.concurrent.atomic.AtomicLong;
 
 class Profiler {
@@ -29,7 +28,9 @@ class Profiler {
 
 	private final AtomicLong callCount = new AtomicLong(0);
 	private final AtomicLong totalNanos = new AtomicLong(0);
-	private final ThreadLocal<ArrayDeque<Long>> entryTimes = ThreadLocal.withInitial(ArrayDeque::new);
+
+	/* [0] = re-entry depth, [1] = System.nanoTime() at outermost entry */
+	private final ThreadLocal<long[]> threadState = ThreadLocal.withInitial(() -> new long[2]);
 
 	Profiler(String className, String methodSig) {
 		this.className = className;
@@ -37,16 +38,21 @@ class Profiler {
 	}
 
 	void enter() {
-		entryTimes.get().push(System.nanoTime());
+		long[] state = threadState.get();
+		if (state[0] == 0) {
+			state[1] = System.nanoTime();
+		}
+		state[0]++;
 	}
 
 	void exit() {
-		Long start = entryTimes.get().poll();
-		if (start == null) {
-			return;
+		long[] state = threadState.get();
+		state[0]--;
+
+		if (state[0] == 0) {
+			totalNanos.addAndGet(System.nanoTime() - state[1]);
+			callCount.incrementAndGet();
 		}
-		totalNanos.addAndGet(System.nanoTime() - start);
-		callCount.incrementAndGet();
 	}
 
 	long getCallCount() {
