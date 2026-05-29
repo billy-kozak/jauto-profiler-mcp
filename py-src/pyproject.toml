@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jauto-profiler"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = ["mcp"]
+
+[project.scripts]
+jauto-prof = "jauto_prof_cli:main"
+
+[tool.setuptools]
+py-modules = ["prof_client", "jauto_prof_cli"]
+
+[tool.setuptools.package-dir]
+"" = "."

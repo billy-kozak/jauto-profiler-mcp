@@ -58,21 +58,32 @@ BUILD_DIR := build
 OBJ_DIR := build/c/obj
 DEP_DIR := build/c/deps
 JAVA_BUILD_DIR := build/java
-JAR_FILE := $(BUILD_DIR)/jauto-prof-lib.jar
 
 ASM_VERSION := 9.10.1
 ASM_JAR := $(BUILD_DIR)/deps/asm-$(ASM_VERSION).jar
 
 OUTPUT_DIR := bin
-OUT_LIB := $(OUTPUT_DIR)/jauto-profiler.so
+
+DIST_DIR := build/dist
+DIST_NAME := jauto-prof
+DIST_ROOT := $(DIST_DIR)/$(DIST_NAME)
 
 CSRC_ROOT = c-src
 CSRC_DIRS = $(shell find $(SRC_ROOT) -type d)
+
+BUILDSRC_ROOT = build-src
+PYSRC_ROOT = py-src
 
 NO_DEPS_TARGETS += clean directories
 ###############################################################################
 #                                 BUILD FILES                                 #
 ###############################################################################
+OUT_LIB := $(OUTPUT_DIR)/jauto-profiler.so
+JAR_FILE := $(OUTPUT_DIR)/jauto-prof-lib.jar
+
+BIN_FILES := $(OUT_LIB) $(JAR_FILE)
+OUT_DIST := $(DIST_DIR)/jauto-prof.tar.gz
+
 C_FILES = $(shell find $(CSRC_ROOT) -name "*.c")
 O_FILES = $(C_FILES:$(CSRC_ROOT)/%.c=$(OBJ_DIR)/%.o)
 D_FILES = $(C_FILES:$(CSRC_ROOT)/%.c=$(DEP_DIR)/%.d)
@@ -80,6 +91,11 @@ D_FILES = $(C_FILES:$(CSRC_ROOT)/%.c=$(DEP_DIR)/%.d)
 JSRC_ROOT = java-src/main/java
 JAVA_FILES = $(shell find $(JSRC_ROOT) -name "*.java")
 CLASS_FILES = $(JAVA_FILES:$(JSRC_ROOT)/%.java=$(JAVA_BUILD_DIR)/%.class)
+
+PYSRC_FILES = $(shell find $(PYSRC_ROOT) -name "*.py")
+PYSRC_FILES += $(PYSRC_ROOT)/pyproject.toml
+
+SETUP_DIST = build-src/setup
 
 vpath %.c $(CSRC_DIRS)
 
@@ -97,10 +113,17 @@ endef
 define d_to_c
 $(patsubst $(DEP_DIR)/%.d,$(OBJ_DIR)/%.c,$(1))
 endef
+
+define prefix_inst
+tar -C $(1) -cf - $(2) | tar -C $(3) -xf -
+endef
 ###############################################################################
-#                                 BUILD FILES                                 #
+#                                   TARGETS                                   #
 ###############################################################################
 all: optimized
+
+.PHONY: dist
+dist: $(OUT_DIST)
 
 optimized: CFLAGS +=-Os -flto=auto
 optomized: LDFLAGS += -Os -flto=auto
@@ -134,11 +157,20 @@ $(ASM_JAR):
 
 $(JAR_FILE): $(CLASS_FILES) $(ASM_JAR) $(OUTPUT_DIR)/.dir_dummy
 	$(JAR) cf $@ -C $(JAVA_BUILD_DIR) .
-	cp $@ $(OUTPUT_DIR)/
 
 $(CLASS_FILES): $(JAVA_BUILD_DIR)/%.class: $(JSRC_ROOT)/%.java | $(ASM_JAR)
 	@mkdir -p $(dir $(@))
 	$(JAVAC) $(JAVACFLAGS) -d $(JAVA_BUILD_DIR) -sourcepath $(JSRC_ROOT) $<
+
+$(OUT_DIST): COPYING COPYING.LESSER
+$(OUT_DIST): $(BIN_FILES) $(PYSRC_FILES) $(SETUP_DIST)
+	rm -rf $(DIST_ROOT)
+	mkdir -p $(DIST_ROOT)
+	$(call prefix_inst,./,$(PYSRC_FILES),$(DIST_ROOT))
+	$(call prefix_inst,./,$(BIN_FILES),$(DIST_ROOT))
+	$(call prefix_inst,./,COPYING COPYING.LESSER,$(DIST_ROOT))
+	install $(SETUP_DIST) $(DIST_ROOT)
+	tar cvzf $(@) -C $(DIST_DIR) $(DIST_NAME)
 
 .PHONY: clean
 clean:
