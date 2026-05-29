@@ -96,6 +96,7 @@ PYSRC_FILES = $(shell find $(PYSRC_ROOT) -name "*.py")
 PYSRC_FILES += $(PYSRC_ROOT)/pyproject.toml
 
 SETUP_DIST = build-src/setup
+MCP_DIST = $(BUILDSRC_ROOT)/entry-points/jauto-prof-mcp
 
 vpath %.c $(CSRC_DIRS)
 
@@ -162,13 +163,14 @@ $(CLASS_FILES): $(JAVA_BUILD_DIR)/%.class: $(JSRC_ROOT)/%.java | $(ASM_JAR)
 	@mkdir -p $(dir $(@))
 	$(JAVAC) $(JAVACFLAGS) -d $(JAVA_BUILD_DIR) -sourcepath $(JSRC_ROOT) $<
 
-$(OUT_DIST): COPYING COPYING.LESSER
+$(OUT_DIST): COPYING COPYING.LESSER $(MCP_DIST)
 $(OUT_DIST): $(BIN_FILES) $(PYSRC_FILES) $(SETUP_DIST)
 	rm -rf $(DIST_ROOT)
 	mkdir -p $(DIST_ROOT)
 	$(call prefix_inst,./,$(PYSRC_FILES),$(DIST_ROOT))
 	$(call prefix_inst,./,$(BIN_FILES),$(DIST_ROOT))
 	$(call prefix_inst,./,COPYING COPYING.LESSER,$(DIST_ROOT))
+	install -D $(MCP_DIST) $(DIST_ROOT)/bin
 	install $(SETUP_DIST) $(DIST_ROOT)
 	tar cvzf $(@) -C $(DIST_DIR) $(DIST_NAME)
 
