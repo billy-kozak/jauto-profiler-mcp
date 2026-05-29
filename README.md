@@ -12,9 +12,11 @@ The MCP server allows agents to instrument individual methods and extract profil
 
 After setup, two interfaces are available:
 
-**CLI** — `bin/jauto-prof <subcommand>` (see builtin --help for more info)
+**CLI** — `jauto-prof <subcommand>` (see builtin --help for more info)
+**MCP server** — run `jauto-prof-mcp` and configure this invocation in your agent harness.
 
-**MCP server** — run `.venv/bin/python py-src/jauto-prof-mcp.py` and configure this invocation in your agent harness.
+From the dev directory, these files can be found in `scripts`. Or see [Installation](#installation) to use from a
+distribution release.
 
 The profiler communicates over a Unix domain socket. The default path is `/tmp/jauto-profiler.sock`, overridable
 via `$JAUTO_PROF_SOCKET`. Two simultaneously running instances must each be given a distinct socket path.
