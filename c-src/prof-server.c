@@ -18,7 +18,7 @@
 
 #include "prof-server.h"
 
-#include "ev-queue.h"
+#include "util/ev-queue.h"
 #include "prof-server-msg.h"
 #include "prof-env.h"
 #include "user-if.h"
@@ -26,7 +26,7 @@
 #include "prof-server-ev.h"
 #include "class-info.h"
 #include "bytecode.h"
-#include "jni-profiler.h"
+#include "jni/jni-profiler.h"
 #include "bc-instrument.h"
 
 #include <jvmti.h>

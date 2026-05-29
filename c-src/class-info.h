@@ -18,8 +18,8 @@
 #ifndef _CLASS_INFO_H
 #define _CLASS_INFO_H
 
-#include "dyn-arr.h"
-#include "pstring.h"
+#include "util/dyn-arr.h"
+#include "util/pstring.h"
 
 #include <stddef.h>
 

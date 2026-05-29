@@ -32,8 +32,8 @@
 #include <unistd.h>
 #include <stdbool.h>
 
-#include "dyn-arr.h"
-#include "ref-count.h"
+#include "util/dyn-arr.h"
+#include "util/ref-count.h"
 
 #define UIF_LISTEN_BACKLOG  5
 #define UIF_MAX_BODY_SIZE   (1024 * 1024)

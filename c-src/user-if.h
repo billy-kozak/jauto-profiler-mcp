@@ -21,8 +21,8 @@
 
 #include <stdint.h>
 
-#include "cc.h"
-#include "pstring.h"
+#include "meta/cc.h"
+#include "util/pstring.h"
 
 #if __STDC_VERSION__ >= 202300L
 	#define A_FLEX

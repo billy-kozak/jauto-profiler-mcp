@@ -18,7 +18,7 @@
 
 #include "class-info.h"
 
-#include "dyn-arr.h"
+#include "util/dyn-arr.h"
 
 #include <stdlib.h>
 #include <string.h>
