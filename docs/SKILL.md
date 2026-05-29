@@ -1,3 +1,7 @@
+---
+description: How to use the jauto-profiler-tools
+---
+
 # jauto-profiler MCP — Agent Skill Guide
 
 This guide is written for agents using the jauto-profiler MCP server to profile

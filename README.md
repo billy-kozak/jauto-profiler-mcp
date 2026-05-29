@@ -6,26 +6,38 @@ The MCP server allows agents to instrument individual methods and extract profil
 
 # Using the Profiler
 
-- Find built artifacts in bin/
-- jauto-prof-lib.jar must be on the classpath of your target application.
-- jauto-profiler.so must be passed to your JVM using the argument  -agentpath:jauto-profiler.so
-- Run the setup script to initialize the venv for the Python MCP server. You cn then run the MCP server directly from
-  the py-src directory with .venv/bin/python3 py-src/jauto-prof-mcp.py (configure this invocation in your agent
-  harness).
+- `jauto-prof-lib.jar` must be on the classpath of your target application.
+- `jauto-profiler.so` must be passed to your JVM via `-agentpath:/path/to/jauto-profiler.so`.
+- Run `setup` to create the Python venv and install the CLI and MCP server.
 
-The profiler communicates with the MCP server over a unix domain socket. By default, this socket will be placed at
-`/tmp/jauto-profiler.sock`. The socket location can be changed using the environment variable `$JAUTO_PROF_SOCKET`.
-Two agents running at the same time will try to use the same socket location (and therefore fail to work correclty)
-unless they are each configured with different `JAUTO_PROF_SOCKET` variables.
+After setup, two interfaces are available:
+
+**CLI** — `bin/jauto-prof <subcommand>` (see builtin --help for more info)
+
+**MCP server** — run `.venv/bin/python py-src/jauto-prof-mcp.py` and configure this invocation in your agent harness.
+
+The profiler communicates over a Unix domain socket. The default path is `/tmp/jauto-profiler.sock`, overridable
+via `$JAUTO_PROF_SOCKET`. Two simultaneously running instances must each be given a distinct socket path.
 
 # Building
 
-Run `setup` to download and setup the python environment.
+Run `build-src/setup` to create the Python venv.
 
 Run `make` to download all other dependencies and build the whole project.
 
+Run `make dist` to produce a self-contained distribution tarball at `build/dist/jauto-prof.tar.gz`.
+Extract it and run `build-src/setup` from the extracted directory to install.
+
 Requires python3, and openjdk 8 or higher. Set `JAVA_HOME` to compile against a particular installed version of
 openjdk.
+
+# Installation
+
+1. Extract the distribution tarball.
+2. Run the `setup` script.
+
+The agent library (jauto-profiler.so) jar file (jauto-profiler-lib.jar), CLI entry point (jauto-prof), and MCP server
+entry point (jauto-prof-mcp) will now be found in the bin directory.
 
 # Architecture
 
