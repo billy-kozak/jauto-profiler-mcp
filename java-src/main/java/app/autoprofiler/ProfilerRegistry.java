@@ -18,6 +18,11 @@
 
 package app.autoprofiler;
 
+import app.autoprofiler.profiler.Profiler;
+import app.autoprofiler.profiler.ProfilerEntry;
+import app.autoprofiler.profiler.ProfilerSnapshot;
+import app.autoprofiler.util.Logger;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;

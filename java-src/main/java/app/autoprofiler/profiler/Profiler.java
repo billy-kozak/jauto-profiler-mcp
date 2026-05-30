@@ -16,15 +16,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package app.autoprofiler;
+package app.autoprofiler.profiler;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-class Profiler {
+public class Profiler {
 
-    final String className;
-    final String methodSig;
-    volatile boolean active = true;
+    public final String className;
+    public final String methodSig;
+    public volatile boolean active = true;
 
     private final AtomicLong callCount = new AtomicLong(0);
     private final AtomicLong totalNanos = new AtomicLong(0);
@@ -32,12 +32,12 @@ class Profiler {
     /* [0] = re-entry depth, [1] = System.nanoTime() at outermost entry */
     private final ThreadLocal<long[]> threadState = ThreadLocal.withInitial(() -> new long[2]);
 
-    Profiler(String className, String methodSig) {
+    public Profiler(String className, String methodSig) {
         this.className = className;
         this.methodSig = methodSig;
     }
 
-    void enter() {
+    public void enter() {
         long[] state = threadState.get();
         if (state[0] == 0) {
             state[1] = System.nanoTime();
@@ -45,7 +45,7 @@ class Profiler {
         state[0]++;
     }
 
-    void exit() {
+    public void exit() {
         long[] state = threadState.get();
         state[0]--;
 
@@ -55,11 +55,11 @@ class Profiler {
         }
     }
 
-    long getCallCount() {
+    public long getCallCount() {
         return callCount.get();
     }
 
-    long getTotalNanos() {
+    public long getTotalNanos() {
         return totalNanos.get();
     }
 }

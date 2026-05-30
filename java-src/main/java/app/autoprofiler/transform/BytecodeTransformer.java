@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package app.autoprofiler;
+package app.autoprofiler.transform;
 
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;

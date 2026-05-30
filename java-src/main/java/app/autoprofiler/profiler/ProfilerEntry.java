@@ -16,32 +16,32 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package app.autoprofiler;
+package app.autoprofiler.profiler;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-class ProfilerEntry {
+public class ProfilerEntry {
 
-    static final int RING_BUFFER_SIZE = 3600;
+    public static final int RING_BUFFER_SIZE = 3600;
 
-    final Profiler profiler;
+    public final Profiler profiler;
     private final ProfilerSnapshot[] buffer = new ProfilerSnapshot[RING_BUFFER_SIZE];
     private int head = 0;
 
-    ProfilerEntry(Profiler profiler) {
+    public ProfilerEntry(Profiler profiler) {
         this.profiler = profiler;
     }
 
-    synchronized void record(long timestamp) {
+    public synchronized void record(long timestamp) {
         buffer[head] = new ProfilerSnapshot(
             timestamp, profiler.getCallCount(), profiler.getTotalNanos()
         );
         head = (head + 1) % RING_BUFFER_SIZE;
     }
 
-    ProfilerSnapshot[] getOrderedSnapshots() {
+    public ProfilerSnapshot[] getOrderedSnapshots() {
         List<ProfilerSnapshot> result = new ArrayList<>(RING_BUFFER_SIZE);
         synchronized (this) {
             for (ProfilerSnapshot snap : buffer) {

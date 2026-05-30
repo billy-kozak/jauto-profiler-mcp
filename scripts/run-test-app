@@ -14,7 +14,7 @@ LOG_FILE="/tmp/jauto-prof-test-app.log"
 "$JAVA_HOME/bin/java" \
 	-agentpath:"${PROJECT_ROOT}/bin/jauto-profiler.so" \
 	-cp "$PROJECT_ROOT/bin/jauto-prof-lib.jar" \
-	app.autoprofiler.TestMain "$@" > >(tee "${LOG_FILE}") 2>&1 &
+	app.autoprofiler.test.TestMain "$@" > >(tee "${LOG_FILE}") 2>&1 &
 
 PID=$!
 echo ${PID} > "${PID_FILE}"

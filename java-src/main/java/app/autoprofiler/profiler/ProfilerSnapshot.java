@@ -16,15 +16,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package app.autoprofiler;
+package app.autoprofiler.profiler;
 
-class ProfilerSnapshot implements Comparable<ProfilerSnapshot> {
+public class ProfilerSnapshot implements Comparable<ProfilerSnapshot> {
 
-    final long timestamp;
-    final long callCount;
-    final long totalNanos;
+    public final long timestamp;
+    public final long callCount;
+    public final long totalNanos;
 
-    ProfilerSnapshot(long timestamp, long callCount, long totalNanos) {
+    public ProfilerSnapshot(long timestamp, long callCount, long totalNanos) {
         this.timestamp = timestamp;
         this.callCount = callCount;
         this.totalNanos = totalNanos;

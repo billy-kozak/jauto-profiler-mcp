@@ -24,7 +24,7 @@
 
 #define LOG_TAG "bc-instrument"
 
-#define TRANSFORMER_CLASS "app/autoprofiler/BytecodeTransformer"
+#define TRANSFORMER_CLASS "app/autoprofiler/transform/BytecodeTransformer"
 #define TRANSFORM_SIG \
 	"([B[Ljava/lang/String;[Ljava/lang/String;[I)[B"
 
