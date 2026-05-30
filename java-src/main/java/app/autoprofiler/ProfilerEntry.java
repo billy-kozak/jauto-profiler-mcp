@@ -24,33 +24,33 @@ import java.util.List;
 
 class ProfilerEntry {
 
-	static final int RING_BUFFER_SIZE = 3600;
+    static final int RING_BUFFER_SIZE = 3600;
 
-	final Profiler profiler;
-	private final ProfilerSnapshot[] buffer = new ProfilerSnapshot[RING_BUFFER_SIZE];
-	private int head = 0;
+    final Profiler profiler;
+    private final ProfilerSnapshot[] buffer = new ProfilerSnapshot[RING_BUFFER_SIZE];
+    private int head = 0;
 
-	ProfilerEntry(Profiler profiler) {
-		this.profiler = profiler;
-	}
+    ProfilerEntry(Profiler profiler) {
+        this.profiler = profiler;
+    }
 
-	synchronized void record(long timestamp) {
-		buffer[head] = new ProfilerSnapshot(
-			timestamp, profiler.getCallCount(), profiler.getTotalNanos()
-		);
-		head = (head + 1) % RING_BUFFER_SIZE;
-	}
+    synchronized void record(long timestamp) {
+        buffer[head] = new ProfilerSnapshot(
+            timestamp, profiler.getCallCount(), profiler.getTotalNanos()
+        );
+        head = (head + 1) % RING_BUFFER_SIZE;
+    }
 
-	ProfilerSnapshot[] getOrderedSnapshots() {
-		List<ProfilerSnapshot> result = new ArrayList<>(RING_BUFFER_SIZE);
-		synchronized (this) {
-			for (ProfilerSnapshot snap : buffer) {
-				if (snap != null) {
-					result.add(snap);
-				}
-			}
-		}
-		Collections.sort(result);
-		return result.toArray(new ProfilerSnapshot[0]);
-	}
+    ProfilerSnapshot[] getOrderedSnapshots() {
+        List<ProfilerSnapshot> result = new ArrayList<>(RING_BUFFER_SIZE);
+        synchronized (this) {
+            for (ProfilerSnapshot snap : buffer) {
+                if (snap != null) {
+                    result.add(snap);
+                }
+            }
+        }
+        Collections.sort(result);
+        return result.toArray(new ProfilerSnapshot[0]);
+    }
 }

@@ -22,44 +22,44 @@ import java.util.concurrent.atomic.AtomicLong;
 
 class Profiler {
 
-	final String className;
-	final String methodSig;
-	volatile boolean active = true;
+    final String className;
+    final String methodSig;
+    volatile boolean active = true;
 
-	private final AtomicLong callCount = new AtomicLong(0);
-	private final AtomicLong totalNanos = new AtomicLong(0);
+    private final AtomicLong callCount = new AtomicLong(0);
+    private final AtomicLong totalNanos = new AtomicLong(0);
 
-	/* [0] = re-entry depth, [1] = System.nanoTime() at outermost entry */
-	private final ThreadLocal<long[]> threadState = ThreadLocal.withInitial(() -> new long[2]);
+    /* [0] = re-entry depth, [1] = System.nanoTime() at outermost entry */
+    private final ThreadLocal<long[]> threadState = ThreadLocal.withInitial(() -> new long[2]);
 
-	Profiler(String className, String methodSig) {
-		this.className = className;
-		this.methodSig = methodSig;
-	}
+    Profiler(String className, String methodSig) {
+        this.className = className;
+        this.methodSig = methodSig;
+    }
 
-	void enter() {
-		long[] state = threadState.get();
-		if (state[0] == 0) {
-			state[1] = System.nanoTime();
-		}
-		state[0]++;
-	}
+    void enter() {
+        long[] state = threadState.get();
+        if (state[0] == 0) {
+            state[1] = System.nanoTime();
+        }
+        state[0]++;
+    }
 
-	void exit() {
-		long[] state = threadState.get();
-		state[0]--;
+    void exit() {
+        long[] state = threadState.get();
+        state[0]--;
 
-		if (state[0] == 0) {
-			totalNanos.addAndGet(System.nanoTime() - state[1]);
-			callCount.incrementAndGet();
-		}
-	}
+        if (state[0] == 0) {
+            totalNanos.addAndGet(System.nanoTime() - state[1]);
+            callCount.incrementAndGet();
+        }
+    }
 
-	long getCallCount() {
-		return callCount.get();
-	}
+    long getCallCount() {
+        return callCount.get();
+    }
 
-	long getTotalNanos() {
-		return totalNanos.get();
-	}
+    long getTotalNanos() {
+        return totalNanos.get();
+    }
 }

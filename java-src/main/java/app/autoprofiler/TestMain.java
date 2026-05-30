@@ -20,38 +20,38 @@ package app.autoprofiler;
 
 class TestMain {
 
-	private static void profilerCountdownTest(int count) throws InterruptedException {
-		for (int i = count - 1; i >= 0; i--) {
-			count(i);
-			Thread.sleep(1000);
-		}
-	}
+    private static void profilerCountdownTest(int count) throws InterruptedException {
+        for (int i = count - 1; i >= 0; i--) {
+            count(i);
+            Thread.sleep(1000);
+        }
+    }
 
-	private static void count(int i) {
-		if((i % 2) == 0) {
-			countEven(i);
-		} else {
-			countOdd(i);
-		}
-	}
+    private static void count(int i) {
+        if((i % 2) == 0) {
+            countEven(i);
+        } else {
+            countOdd(i);
+        }
+    }
 
-	private static void countOdd(int i) {
-		System.out.println("Countdown Odd: " + i);
-	}
+    private static void countOdd(int i) {
+        System.out.println("Countdown Odd: " + i);
+    }
 
-	private static void countEven(int i) {
-		System.out.println("Countdown Even: " + i);
-	}
+    private static void countEven(int i) {
+        System.out.println("Countdown Even: " + i);
+    }
 
-	public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws InterruptedException {
 
-		int count;
+        int count;
 
-		if (args.length < 1) {
-			count = 3600 * 24;
-		} else {
-			count = Integer.parseInt(args[0]);
-		}
-		profilerCountdownTest(count);
-	}
+        if (args.length < 1) {
+            count = 3600 * 24;
+        } else {
+            count = Integer.parseInt(args[0]);
+        }
+        profilerCountdownTest(count);
+    }
 }

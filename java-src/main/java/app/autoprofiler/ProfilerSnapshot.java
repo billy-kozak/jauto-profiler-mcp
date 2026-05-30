@@ -20,18 +20,18 @@ package app.autoprofiler;
 
 class ProfilerSnapshot implements Comparable<ProfilerSnapshot> {
 
-	final long timestamp;
-	final long callCount;
-	final long totalNanos;
+    final long timestamp;
+    final long callCount;
+    final long totalNanos;
 
-	ProfilerSnapshot(long timestamp, long callCount, long totalNanos) {
-		this.timestamp = timestamp;
-		this.callCount = callCount;
-		this.totalNanos = totalNanos;
-	}
+    ProfilerSnapshot(long timestamp, long callCount, long totalNanos) {
+        this.timestamp = timestamp;
+        this.callCount = callCount;
+        this.totalNanos = totalNanos;
+    }
 
-	@Override
-	public int compareTo(ProfilerSnapshot other) {
-		return Long.compare(this.timestamp, other.timestamp);
-	}
+    @Override
+    public int compareTo(ProfilerSnapshot other) {
+        return Long.compare(this.timestamp, other.timestamp);
+    }
 }
