@@ -27,7 +27,7 @@
 #include "class-info.h"
 #include "bytecode.h"
 #include "jni/jni-profiler.h"
-#include "bc-instrument.h"
+#include "jni/bc-instrument.h"
 #include "util/log.h"
 
 #include <jvmti.h>
