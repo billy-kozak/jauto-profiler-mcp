@@ -18,7 +18,12 @@
 
 package app.autoprofiler.test;
 
+import java.lang.Math;
+import java.util.Random;
+
 class TestMain {
+
+    private static Random rand = new Random();
 
     private static void profilerCountdownTest(int count) throws InterruptedException {
         for (int i = count - 1; i >= 0; i--) {
@@ -35,12 +40,20 @@ class TestMain {
         }
     }
 
+    private static int randWalk() {
+        int r = Math.abs(rand.nextInt());
+        for(int i = 0; i < 10000; i++) {
+            r = rand.nextInt(r) + 1;
+        }
+        return r;
+    }
+
     private static void countOdd(int i) {
-        System.out.println("Countdown Odd: " + i);
+        System.out.println("Countdown Odd: " + i + " - your random number is " + randWalk());
     }
 
     private static void countEven(int i) {
-        System.out.println("Countdown Even: " + i);
+        System.out.println("Countdown Even: " + i + "- your random number is " + randWalk());
     }
 
     public static void main(String[] args) throws InterruptedException {
