@@ -224,3 +224,52 @@ class ProfClient:
                 _MSG_TYPE_RESPONSE_CLASS_METHODS,
             )
         return self._parse_string_list(body)
+
+
+def compute_stat_summary(
+    stats: list[dict],
+    class_name: str,
+    method_sig: str,
+    start_time: float,
+    end_time: float,
+) -> dict:
+    """Compute total runs and average ns/call for a method over a time window.
+
+    stats: output of ProfClient.get_stats()
+    Snapshots are cumulative; the function diffs the first and last snapshot
+    that fall within [start_time, end_time].
+    """
+    entry = None
+    for e in stats:
+        if e["class_name"] == class_name and e["method_sig"] == method_sig:
+            entry = e
+            break
+    if entry is None:
+        raise ValueError(
+            f"method not found in stats: {class_name} / {method_sig}"
+        )
+
+    snaps = [
+        s for s in entry["snapshots"]
+        if start_time <= s["timestamp"] <= end_time
+    ]
+    if len(snaps) < 2:
+        raise ValueError(
+            f"need at least 2 snapshots in [{start_time}, {end_time}], "
+            f"found {len(snaps)}"
+        )
+
+    first = snaps[0]
+    last = snaps[-1]
+    total_runs = last["call_count"] - first["call_count"]
+    total_nanos = last["total_nanos"] - first["total_nanos"]
+    avg_ns = total_nanos / total_runs if total_runs > 0 else 0.0
+
+    return {
+        "class_name": class_name,
+        "method_sig": method_sig,
+        "start_time": start_time,
+        "end_time": end_time,
+        "total_runs": total_runs,
+        "avg_ns_per_call": avg_ns,
+    }

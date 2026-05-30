@@ -22,7 +22,8 @@ import argparse
 import json
 import sys
 
-from prof_client import ProfClient
+from prof_client import ProfClient, compute_stat_summary
+from time_util import parse_time_arg
 
 ###############################################################################
 # subcommand handlers
@@ -68,6 +69,16 @@ def cmd_dump_stats(client, args):
         with open(args.file, 'w') as f:
             f.write(text)
 
+
+def cmd_stat_summary(client, args):
+    start = parse_time_arg(args.start_time)
+    end   = parse_time_arg(args.end_time)
+    stats = client.get_stats()
+    result = compute_stat_summary(
+        stats, args.class_name, args.method_sig, start, end
+    )
+    print(json.dumps(result, indent=2))
+
 ###############################################################################
 # entry point
 ###############################################################################
@@ -106,10 +117,24 @@ def main():
     sub.add_parser('shutdown', help='request the profiled JVM to shut down')
 
     p = sub.add_parser('dump-stats', help='dump profiling stats as JSON')
-    p.add_argument(
-        'file', metavar='file', nargs='?', default='-',
+    p.add_argument( 'file', metavar='file', nargs='?', default='-',
         help='output file path (default: stdout)',
     )
+
+    p = sub.add_parser(
+        'stat-summary',
+        help=(
+            'Summarise runs and average runtime for a method over a time window. The start and end time arguments '
+            'are strings which are either in one of the formats [yyyy-][mm-][dd-]hh:mm:ss OR <sec>, where the '
+            'first form denotes a specific time in the system time zone, and the second form is the a number of '
+            'seconds in the past from the current system clock time. If left unset, the end-time is presumed to be '
+            'the current time (equivalent to 0.0).'
+        ),
+    )
+    p.add_argument('class_name', metavar='class')
+    p.add_argument('method_sig', metavar='method')
+    p.add_argument('start_time', metavar='start')
+    p.add_argument('end_time', metavar='end', nargs='?', default='0')
 
     args = parser.parse_args()
 
@@ -121,6 +146,7 @@ def main():
         'instrument-method':  ClientCmd(client, cmd_instrument_method),
         'deinstrument-method': ClientCmd(client, cmd_deinstrument_method),
         'dump-stats':         ClientCmd(client, cmd_dump_stats),
+        'stat-summary':       ClientCmd(client, cmd_stat_summary),
         'shutdown':           ClientCmd(client, cmd_shutdown),
     }
 

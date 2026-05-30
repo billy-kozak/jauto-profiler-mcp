@@ -51,8 +51,10 @@ before starting a new one.**
    signatures.
 4. Call `instrument_method` for each method you want to profile.
 5. Wait at least 5–10 seconds for snapshots to accumulate.
-6. Call `get_profiler_stats` with an `output_file` path, then analyse the
-   resulting JSON with shell or Python tools for accurate results.
+6. Call `dump_stats` with an `output_file` path to save the raw JSON, then
+   use `stat_summary` or a shell/Python script to extract meaningful numbers.
+   **Never try to read or interpret the raw snapshot JSON by eye** — see the
+   warning below.
 7. Call `deinstrument_method` when done to restore the original bytecode.
 
 ---
@@ -72,6 +74,26 @@ seen the call tree above it.
 
 ---
 
+## WARNING: do not eyeball raw profiler stats
+
+The raw snapshot data produced by `dump_stats` is large, cumulative, and
+requires arithmetic across many rows. **Agents must not attempt to read or
+interpret the raw JSON by eye.** Mistakes in mental arithmetic on nanosecond
+counters are common, systematic, and hard to detect.
+
+Use **`stat_summary`** to get reliable per-method metrics for a time window:
+
+```
+stat_summary(class_name, method_sig, start_time, end_time)
+→ { total_runs, avg_ns_per_call, ... }
+```
+
+If `stat_summary` does not give you what you need, write a short Python or
+shell script that reads the dumped JSON file and computes the values
+programmatically. Do not attempt the arithmetic in your head.
+
+---
+
 ## Interpreting the stats
 
 Snapshots are **cumulative**. A single snapshot tells you nothing useful on its
@@ -86,10 +108,6 @@ ns_per_call   = delta_nanos / delta_calls
 
 Skip the first 2–3 snapshots after instrumentation — the JIT recompiles the
 retransformed class during those seconds and the numbers will be noisy.
-
-Use `output_file` to write the raw JSON and compute the above in a Python or
-shell script rather than estimating by eye. Agents are not reliable at mental
-arithmetic on large numbers.
 
 ---
 

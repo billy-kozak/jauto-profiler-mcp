@@ -22,7 +22,8 @@ import json
 
 from mcp.server.fastmcp import FastMCP
 
-from prof_client import ProfClient
+from prof_client import ProfClient, compute_stat_summary
+from time_util import resolve_time_arg
 
 ###############################################################################
 # MCP server
@@ -99,10 +100,10 @@ def deinstrument_method(class_name: str, method_sig: str) -> None:
 
 
 @mcp.tool()
-def get_profiler_stats(output_file: str | None = None) -> list[dict]:
-    """Return profiling statistics for all currently instrumented methods.
+def dump_stats(output_file: str) -> str:
+    """Write profiling statistics for all instrumented methods to a JSON file.
 
-    Each entry contains:
+    Each entry in the JSON contains:
       class_name  - JVM internal class name
       method_sig  - method signature in "name:descriptor" form
       snapshots   - list of per-second snapshots in chronological order,
@@ -120,16 +121,56 @@ def get_profiler_stats(output_file: str | None = None) -> list[dict]:
 
     Up to 3600 snapshots (one hour) of history are retained per method.
 
-    output_file: strongly recommended — write the raw JSON to this path and
-                 analyse it with a Python or shell script rather than
-                 estimating from the raw numbers by eye. Agents are not
-                 reliable at mental arithmetic on snapshot data.
+    WARNING FOR AGENTS: Do NOT attempt to read or interpret the raw JSON dump
+    by eye. The snapshot data is large, cumulative, and requires arithmetic
+    across many rows. Use the stat_summary tool to extract meaningful metrics,
+    or write a short Python/shell script to analyse the file programmatically.
+    Eyeballing snapshot tables leads to systematic errors.
     """
     stats = ProfClient().get_stats()
-    if output_file is not None:
-        with open(output_file, "w") as f:
-            json.dump(stats, f, indent=2)
-    return stats
+    with open(output_file, "w") as f:
+        json.dump(stats, f, indent=2)
+    return f"Stats written to {output_file}"
+
+
+@mcp.tool()
+def stat_summary(
+    class_name: str,
+    method_sig: str,
+    start_time: str | float,
+    end_time: str | float = 0,
+) -> dict:
+    """Return total runs and average ns/call for a method over a time window.
+
+    Fetches the current profiler stats and summarises the named method for
+    the window [start_time, end_time] (inclusive).
+
+    class_name: JVM internal class name (e.g. "org/example/MyClass")
+    method_sig: exact signature from get_class_methods (e.g. "doWork:(I)V")
+
+    start_time and end_time accept two forms:
+      number  — seconds in the past from now (0 = now, 60 = one minute ago)
+      string  — [yyyy-][mm-][dd-]hh:mm:ss in local time, with date components
+                optional from the left (missing parts default to today)
+
+    end_time defaults to 0 (the current time).
+
+    Returns a dict with:
+      class_name      - as supplied
+      method_sig      - as supplied
+      start_time      - resolved window start as a Unix timestamp
+      end_time        - resolved window end as a Unix timestamp
+      total_runs      - total method invocations in the window
+      avg_ns_per_call - average wall-clock nanoseconds per invocation
+
+    At least two snapshots must fall within the requested window.
+    Skip the first 2-3 seconds after instrumentation — JIT recompilation
+    makes those samples noisy.
+    """
+    start = resolve_time_arg(start_time)
+    end   = resolve_time_arg(end_time)
+    stats = ProfClient().get_stats()
+    return compute_stat_summary(stats, class_name, method_sig, start, end)
 
 
 @mcp.tool()
