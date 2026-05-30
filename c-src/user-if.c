@@ -18,11 +18,15 @@
 
 #include "user-if.h"
 
+#include "prof-env.h"
+#include "util/fs-util.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/epoll.h>
@@ -61,6 +65,7 @@ struct user_if {
 	int server_fd;
 	int epoll_fd;
 	int shutdown_fd;
+	int listener_running;
 	pthread_t listener;
 	char *socket_path;
 	int (*handler)(void*, struct user_msg *, struct user_if_client *);
@@ -300,6 +305,41 @@ static void *listener_thread(void *arg)
 	return NULL;
 }
 
+static int check_socket_conflict(const char *path)
+{
+	struct sockaddr_un addr;
+	size_t path_len;
+	int fd;
+	int ret;
+
+	path_len = strlen(path);
+	if (path_len >= sizeof(addr.sun_path)) {
+		return 0;
+	}
+
+	fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	if (fd < 0) {
+		return 0;
+	}
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_UNIX;
+	memcpy(addr.sun_path, path, path_len + 1);
+
+	ret = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
+	close(fd);
+
+	if (ret == 0) {
+		return -1; /* live server at this path */
+	}
+
+	if (errno == ECONNREFUSED && fs_is_socket(path)) {
+		unlink(path); /* stale socket, clear it */
+	}
+
+	return 0;
+}
+
 struct user_if *uif_init(const char *path)
 {
 	struct user_if *uif;
@@ -315,12 +355,15 @@ struct user_if *uif_init(const char *path)
 	if (uif == NULL) {
 		return NULL;
 	}
-	if(client_list_init(&uif->clients, UIF_INIT_CAP_CLIENTS)) {
+
+	if (client_list_init(&uif->clients, UIF_INIT_CAP_CLIENTS)) {
 		goto fail;
 	}
 
 	uif->handler = NULL;
 	uif->handler_data = NULL;
+	uif->server_fd = -1;
+	uif->listener_running = 0;
 
 	uif->socket_path = strdup(path);
 	if (uif->socket_path == NULL) {
@@ -337,9 +380,17 @@ struct user_if *uif_init(const char *path)
 		goto fail_epoll;
 	}
 
-	uif->server_fd = socket(
-		AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0
-	);
+	if (check_socket_conflict(path) != 0) {
+		fprintf(
+			stderr,
+			"jauto-profiler: socket '%s' is already in use by a "
+			"live server. Set %s to use a different path.\n",
+			path, SOCKET_ENV_VAR
+		);
+		goto fail_shutdown;
+	}
+
+	uif->server_fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
 	if (uif->server_fd < 0) {
 		goto fail_shutdown;
 	}
@@ -348,13 +399,9 @@ struct user_if *uif_init(const char *path)
 	addr.sun_family = AF_UNIX;
 	memcpy(addr.sun_path, path, path_len + 1);
 
-	unlink(path);
-
-	int bind_ret = bind(
+	if (bind(
 		uif->server_fd, (struct sockaddr *)&addr, sizeof(addr)
-	);
-
-	if (bind_ret != 0) {
+	) != 0) {
 		goto fail_server;
 	}
 
@@ -372,22 +419,25 @@ struct user_if *uif_init(const char *path)
 
 	ev.events = EPOLLIN;
 	ev.data.fd = uif->shutdown_fd;
-
-	int epc_ret = epoll_ctl(
+	if (epoll_ctl(
 		uif->epoll_fd, EPOLL_CTL_ADD, uif->shutdown_fd, &ev
-	);
-	if (epc_ret != 0) {
+	) != 0) {
 		goto fail_server;
 	}
 
-	if (pthread_create( &uif->listener, NULL, listener_thread, uif) != 0) {
+	if (pthread_create(
+		&uif->listener, NULL, listener_thread, uif
+	) != 0) {
 		goto fail_server;
 	}
+
+	uif->listener_running = 1;
 	return uif;
 
 fail_server:
 	close(uif->server_fd);
 	unlink(path);
+	uif->server_fd = -1;
 fail_shutdown:
 	close(uif->shutdown_fd);
 fail_epoll:
@@ -405,15 +455,20 @@ struct user_if *uif_destroy(struct user_if *uif)
 {
 	uint64_t val = 1;
 
-	while (write(
-		uif->shutdown_fd, &val, sizeof(val)
-	) == -1 && errno == EINTR) {}
-	pthread_join(uif->listener, NULL);
+	if (uif->listener_running) {
+		while (write(
+			uif->shutdown_fd, &val, sizeof(val)
+		) == -1 && errno == EINTR) {}
+		pthread_join(uif->listener, NULL);
+	}
 
-	close(uif->server_fd);
+	if (uif->server_fd >= 0) {
+		close(uif->server_fd);
+		unlink(uif->socket_path);
+	}
+
 	close(uif->shutdown_fd);
 	close(uif->epoll_fd);
-	unlink(uif->socket_path);
 	free(uif->socket_path);
 	client_list_destroy(&uif->clients);
 	free(uif);

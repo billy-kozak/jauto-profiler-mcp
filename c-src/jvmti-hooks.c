@@ -19,6 +19,7 @@
 #include <jvmti.h>
 #include <jni.h>
 
+#include <stdio.h>
 #include <string.h>
 
 #include "prof-server.h"
@@ -78,6 +79,7 @@ static void JNICALL vm_init(
     jthread thread
 ) {
 	if (ps_start(server, jvmti_env, jni_env) == NULL) {
+		fprintf(stderr, "jauto-profiler: ps_start failed\n");
 		LOG_ERROR("ps_start failed");
 	}
 }
@@ -127,6 +129,8 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
 
 	server = ps_init();
 	if (server == NULL) {
+		fprintf(stderr, "jauto-profiler: init failed - killing JVM\n");
+		LOG_ERROR("init failed - killing JVM");
 		return JNI_ERR;
 	}
 
