@@ -6,7 +6,7 @@ The MCP server allows agents to instrument individual methods and extract profil
 
 # Using the Profiler
 
-- `jauto-prof-lib.jar` must be on the classpath of your target application.
+- `jauto-prof-lib.jar` must be added to target JVM via `-Xbootclasspath/a:/path/to/jauto-prof-lib.jar`.
 - `jauto-profiler.so` must be passed to your JVM via `-agentpath:/path/to/jauto-profiler.so`.
 - Run `setup` to create the Python venv and install the CLI and MCP server.
 
