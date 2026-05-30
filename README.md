@@ -43,7 +43,7 @@ entry point (jauto-prof-mcp) will now be found in the bin directory.
 
 # Logging
 
-The profiler server logs to /tmp/jauto-prof.log by default. Use the environment variable JAUTO_PROF_LOG to change
+The profiler server logs to /tmp/jauto-prof.log by default. Use the environment variable `$JAUTO_PROF_LOG` to change
 the output location (set to empty string to log to stderr). Use JAUTO_PROF_LOG_LEVEL to set logging level to one of
 OFF, ERROR, WARN, INFO, DEBUG.
 
