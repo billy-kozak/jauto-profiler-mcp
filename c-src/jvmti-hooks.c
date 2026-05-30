@@ -19,11 +19,13 @@
 #include <jvmti.h>
 #include <jni.h>
 
-#include <stdio.h>
 #include <string.h>
 
 #include "prof-server.h"
 #include "prof-server-ev.h"
+#include "util/log.h"
+
+#define LOG_TAG "jvmti-hooks"
 
 static jvmtiEnv *jvmti = NULL;
 static struct prof_server *server = NULL;
@@ -63,10 +65,10 @@ static void JNICALL class_file_load_hook(
 				(size_t)class_data_len
 			);
 		} else {
-			fprintf(stderr, "server was null at class load\n");
+			LOG_WARN("server was null at class load");
 		}
 	} else {
-		fprintf(stderr, "Loaded unnamed class.\n");
+		LOG_DEBUG("loaded unnamed class");
 	}
 }
 
@@ -76,7 +78,7 @@ static void JNICALL vm_init(
     jthread thread
 ) {
 	if (ps_start(server, jvmti_env, jni_env) == NULL) {
-		fprintf(stderr, "jauto-profiler: ps_start failed\n");
+		LOG_ERROR("ps_start failed");
 	}
 }
 
@@ -121,12 +123,14 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
 		NULL
 	);
 
+	log_init();
+
 	server = ps_init();
 	if (server == NULL) {
 		return JNI_ERR;
 	}
 
-	printf("agent ready\n");
+	LOG_INFO("agent ready");
 
 	return JNI_OK;
 }
@@ -137,5 +141,5 @@ JNIEXPORT void JNICALL Agent_OnUnload(JavaVM *vm)
 		ps_destroy(server);
 		server = NULL;
 	}
-	printf("agent unloaded\n");
+	LOG_INFO("agent unloaded");
 }

@@ -19,5 +19,6 @@
 #define _CC_H
 
 #define PACKED __attribute__((__packed__))
+#define THREAD_LOCAL _Thread_local
 
 #endif /* _CC_H */

@@ -28,6 +28,7 @@
 #include "bytecode.h"
 #include "jni/jni-profiler.h"
 #include "bc-instrument.h"
+#include "util/log.h"
 
 #include <jvmti.h>
 #include <jni.h>
@@ -35,7 +36,8 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
+
+#define LOG_TAG "prof-server"
 
 #define PS_CLASSES_INITIAL_CAP 16
 
@@ -235,10 +237,7 @@ static unsigned char *build_instrumented_bytecode(
 	for (i = 0; i < (size_t)count; i++) {
 		const char *colon = strchr(ci->instrumented.arr[i].method_sig, ':');
 		if (colon == NULL) {
-			fprintf(
-				stderr,
-				"jauto-profiler: malformed method_sig in instrumented list\n"
-			);
+			LOG_ERROR("malformed method_sig in instrumented list");
 			goto cleanup;
 		}
 		total_name_buf += (size_t)(colon - ci->instrumented.arr[i].method_sig) + 1;
@@ -270,7 +269,7 @@ static unsigned char *build_instrumented_bytecode(
 	);
 
 	if (result == NULL) {
-		fprintf(stderr, "jauto-profiler: bc_instrument_method failed\n");
+		LOG_ERROR("bc_instrument_method failed");
 	}
 
 cleanup:
@@ -300,7 +299,7 @@ static int retransform_pending(
 
 	ret = jni_retransform_class(jni_env, ps->jvmti, class_name);
 	if (ret != 0) {
-		fprintf(stderr, "jauto-profiler: RetransformClasses failed\n");
+		LOG_ERROR("RetransformClasses failed");
 	}
 
 	ps->pending.class_name   = NULL;
@@ -337,7 +336,7 @@ static void handle_usr_rq_instrument_method(
 		goto respond;
 	}
 	if (id < 0) {
-		fprintf(stderr, "jauto-profiler: jni_create_profiler failed\n");
+		LOG_ERROR("jni_create_profiler failed");
 		goto respond;
 	}
 
@@ -348,10 +347,7 @@ static void handle_usr_rq_instrument_method(
 		}
 	}
 	if (ci == NULL) {
-		fprintf(
-			stderr,
-			"jauto-profiler: class not found: %s\n", class_name
-		);
+		LOG_WARN("instrument: class not found: %s", class_name);
 		goto fail_cleanup_profiler;
 	}
 
@@ -423,13 +419,14 @@ void ps_handle_retransform(
 
 	err = (*jvmti)->Allocate(jvmti, ps->pending.bytecode_len, &buf);
 	if (err != JVMTI_ERROR_NONE) {
-		fprintf(stderr, "jauto-profiler: Allocate failed in retransform\n");
+		LOG_ERROR("Allocate failed in retransform");
 		return;
 	}
 
-	printf("jauto-profiler: retransform hook fired for %s, bytecode_len=%zu\n",
-		name, ps->pending.bytecode_len);
-	fflush(stdout);
+	LOG_DEBUG(
+		"retransform hook fired for %s, bytecode_len=%zu",
+		name, ps->pending.bytecode_len
+	);
 
 	memcpy(buf, (const void *)ps->pending.bytecode, ps->pending.bytecode_len);
 	*new_class_data = buf;
@@ -449,7 +446,7 @@ static void handle_usr_rq_get_stats(
 	free(msg);
 
 	if (jni_get_profiler_stats(jni_env, &stats_buf, &stats_len) != 0) {
-		fprintf(stderr, "jauto-profiler: jni_get_profiler_stats failed\n");
+		LOG_ERROR("jni_get_profiler_stats failed");
 		uif_client_release(client);
 		return;
 	}
@@ -498,11 +495,7 @@ static void handle_usr_rq_deinstrument_method(
 		}
 	}
 	if (ci == NULL) {
-		fprintf(
-			stderr,
-			"jauto-profiler: deinstrument: class not found: %s\n",
-			class_name
-		);
+		LOG_WARN("deinstrument: class not found: %s", class_name);
 		resp_body.status = DEINSTRUMENT_RP_FAIL;
 		goto respond;
 	}
@@ -517,9 +510,8 @@ static void handle_usr_rq_deinstrument_method(
 		}
 	}
 	if (profiler_id == -1) {
-		fprintf(
-			stderr,
-			"jauto-profiler: deinstrument: %s not instrumented in %s\n",
+		LOG_WARN(
+			"deinstrument: %s not instrumented in %s",
 			method_sig, class_name
 		);
 		resp_body.status = DEINSTRUMENT_RP_FAIL;
@@ -535,10 +527,7 @@ static void handle_usr_rq_deinstrument_method(
 		if (retransform_pending(
 			ps, jni_env, class_name, NULL, new_bc, new_bc_len, -1
 		) != 0) {
-			fprintf(
-				stderr,
-				"jauto-profiler: deinstrument retransform failed\n"
-			);
+			LOG_ERROR("deinstrument retransform failed");
 			resp_body.status = DEINSTRUMENT_RP_FAIL;
 		}
 	} else {
@@ -546,17 +535,14 @@ static void handle_usr_rq_deinstrument_method(
 			ps, jni_env, class_name, NULL,
 			ci->bytecode, ci->bytecode_len, -1
 		) != 0) {
-			fprintf(
-				stderr,
-				"jauto-profiler: deinstrument retransform failed\n"
-			);
+			LOG_ERROR("deinstrument retransform failed");
 			resp_body.status = DEINSTRUMENT_RP_FAIL;
 		}
 	}
 
 cleanup_profiler:
 	if (jni_remove_profiler(jni_env, profiler_id) != 0) {
-		fprintf(stderr, "jauto-profiler: jni_remove_profiler failed\n");
+		LOG_ERROR("jni_remove_profiler failed");
 	}
 
 respond:
@@ -620,13 +606,13 @@ static void JNICALL event_loop(jvmtiEnv *jvmti_env, JNIEnv *jni_env, void *arg)
 	(void)jvmti_env;
 
 	if (jni_profiler_init_refs(jni_env) != 0) {
-		fprintf(stderr, "jauto-profiler: jni_profiler_init_refs failed\n");
+		LOG_ERROR("jni_profiler_init_refs failed");
 		sem_post(&ps->shutdown_sem);
 		return;
 	}
 
 	if (bc_instrument_init_refs(jni_env) != 0) {
-		fprintf(stderr, "jauto-profiler: bc_instrument_init_refs failed\n");
+		LOG_ERROR("bc_instrument_init_refs failed");
 		sem_post(&ps->shutdown_sem);
 		return;
 	}
@@ -673,7 +659,7 @@ struct prof_server *ps_init(void)
 
 	ps->uif = uif_init(prof_socket_path());
 	if (ps->uif == NULL) {
-		fprintf(stderr, "User socket creation failed\n");
+		LOG_ERROR("user socket creation failed");
 		goto fail_queue;
 	}
 

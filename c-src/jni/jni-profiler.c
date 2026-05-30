@@ -22,8 +22,11 @@
 #include <jvmti.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
+
+#include "util/log.h"
+
+#define LOG_TAG "jni-profiler"
 
 #define REGISTRY_CLASS  "app/autoprofiler/ProfilerRegistry"
 #define CREATE_SIG      "(Ljava/lang/String;Ljava/lang/String;)I"
@@ -230,8 +233,7 @@ int jni_retransform_class(
 	(*env)->DeleteGlobalRef(env, target);
 
 	if (err != JVMTI_ERROR_NONE) {
-		printf("jauto-profiler: RetransformClasses error code: %d\n", (int)err);
-		fflush(stdout);
+		LOG_ERROR("RetransformClasses error code: %d", (int)err);
 	}
 
 	return (err == JVMTI_ERROR_NONE) ? 0 : -1;

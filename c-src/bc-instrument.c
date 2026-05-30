@@ -19,7 +19,10 @@
 #include "bc-instrument.h"
 
 #include <stdlib.h>
-#include <stdio.h>
+
+#include "util/log.h"
+
+#define LOG_TAG "bc-instrument"
 
 #define TRANSFORMER_CLASS "app/autoprofiler/BytecodeTransformer"
 #define TRANSFORM_SIG \
@@ -38,10 +41,7 @@ int bc_instrument_init_refs(JNIEnv *env)
 
 	local = (*env)->FindClass(env, TRANSFORMER_CLASS);
 	if (local == NULL) {
-		fprintf(
-			stderr,
-			"jauto-profiler: FindClass BytecodeTransformer failed\n"
-		);
+		LOG_ERROR("FindClass BytecodeTransformer failed");
 		if ((*env)->ExceptionCheck(env)) {
 			(*env)->ExceptionClear(env);
 		}
@@ -58,10 +58,7 @@ int bc_instrument_init_refs(JNIEnv *env)
 		env, transformer_class, "transform", TRANSFORM_SIG
 	);
 	if (transform_method == NULL) {
-		fprintf(
-			stderr,
-			"jauto-profiler: GetStaticMethodID transform failed\n"
-		);
+		LOG_ERROR("GetStaticMethodID transform failed");
 		if ((*env)->ExceptionCheck(env)) {
 			(*env)->ExceptionClear(env);
 		}
