@@ -293,6 +293,41 @@ int ps_send_usr_rq_deinstrument_method(
 	return 0;
 }
 
+int ps_send_shutdown_request(
+	struct prof_server *ps, int exit_code, const char *msg
+) {
+	struct ps_msg *ev;
+	struct psm_shutdown_request *body;
+
+	ev = malloc(sizeof(*ev));
+	if (ev == NULL) {
+		return -1;
+	}
+
+	body = &ev->body.shutdown_request;
+
+	ev->type = PS_SHUTDOWN_REQUEST;
+	body->exit_code = exit_code;
+
+	if (msg != NULL) {
+		strncpy(
+			body->msg,
+			msg,
+			PSM_SHUTDOWN_REQUEST_MSG_MAX - 1
+		);
+		body->msg[PSM_SHUTDOWN_REQUEST_MSG_MAX - 1] = '\0';
+	} else {
+		body->msg[0] = '\0';
+	}
+
+	if (ps_send_ev(ps, ev, sizeof(*ev)) != 0) {
+		free(ev);
+		return -1;
+	}
+
+	return 0;
+}
+
 int ps_send_usr_rq_get_stats(
 	struct prof_server *ps, struct user_if_client *client
 ) {

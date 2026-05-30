@@ -22,6 +22,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+static const char *const USR_SHUTDOWN_MSG = "User requested shutdown";
+
 static int handle_class_methods(
 	struct prof_server *ps,
 	struct user_if_client *client,
@@ -170,6 +172,8 @@ int ps_uif_handler(
 		return ps_send_usr_rq_get_stats(ps, client);
 	case REQUEST_DEINSTRUMENT_METHOD:
 		return handle_deinstrument_method(ps, client, msg);
+	case REQUEST_SHUTDOWN:
+		return ps_send_shutdown_request(ps, 0, USR_SHUTDOWN_MSG);
 	default:
 		return -1;
 	}

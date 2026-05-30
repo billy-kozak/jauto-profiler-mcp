@@ -30,6 +30,14 @@ enum ps_msg_type {
 	USR_RQ_GET_STATS,
 	USR_RQ_DEINSTRUMENT_METHOD,
 	PS_SHUTDOWN,
+	PS_SHUTDOWN_REQUEST,
+};
+
+#define PSM_SHUTDOWN_REQUEST_MSG_MAX 256
+
+struct psm_shutdown_request {
+	int exit_code;
+	char msg[PSM_SHUTDOWN_REQUEST_MSG_MAX];
 };
 
 struct psm_class_loaded {
@@ -71,7 +79,10 @@ struct ps_msg {
 		struct psm_usr_rq_class_methods usr_rq_class_methods;
 		struct psm_usr_rq_instrument_method usr_rq_instrument_method;
 		struct psm_usr_rq_get_stats usr_rq_get_stats;
-		struct psm_usr_rq_deinstrument_method usr_rq_deinstrument_method;
+		struct psm_shutdown_request shutdown_request;
+
+		struct psm_usr_rq_deinstrument_method
+			usr_rq_deinstrument_method;
 	} body;
 };
 

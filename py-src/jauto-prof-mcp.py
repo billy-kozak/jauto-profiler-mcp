@@ -132,5 +132,17 @@ def get_profiler_stats(output_file: str | None = None) -> list[dict]:
     return stats
 
 
+@mcp.tool()
+def shutdown_jvm() -> None:
+    """Request the profiled JVM to shut down cleanly via System.exit(0).
+
+    Sends a shutdown request to the profiler server, which will call
+    System.exit(0) on the target JVM. The profiler socket will close as part
+    of the shutdown. Use this when profiling is complete and you want to stop
+    the target application.
+    """
+    ProfClient().shutdown()
+
+
 if __name__ == "__main__":
     mcp.run()

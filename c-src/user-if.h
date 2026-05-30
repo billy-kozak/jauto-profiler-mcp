@@ -44,6 +44,7 @@ enum user_msg_type {
 	RESPONSE_GET_STATS = 7,
 	REQUEST_DEINSTRUMENT_METHOD = 8,
 	RESPONSE_DEINSTRUMENT_METHOD = 9,
+	REQUEST_SHUTDOWN = 10,
 };
 
 enum instrument_resp_status {

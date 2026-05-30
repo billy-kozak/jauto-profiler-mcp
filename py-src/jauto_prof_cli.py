@@ -55,6 +55,10 @@ def cmd_deinstrument_method(client, args):
     client.deinstrument_method(args.class_name, args.method_sig)
 
 
+def cmd_shutdown(client, args):
+    client.shutdown()
+
+
 def cmd_dump_stats(client, args):
     stats = client.get_stats()
     text = json.dumps(stats, indent=2)
@@ -99,6 +103,8 @@ def main():
     p.add_argument('class_name', metavar='class')
     p.add_argument('method_sig', metavar='method')
 
+    sub.add_parser('shutdown', help='request the profiled JVM to shut down')
+
     p = sub.add_parser('dump-stats', help='dump profiling stats as JSON')
     p.add_argument(
         'file', metavar='file', nargs='?', default='-',
@@ -115,6 +121,7 @@ def main():
         'instrument-method':  ClientCmd(client, cmd_instrument_method),
         'deinstrument-method': ClientCmd(client, cmd_deinstrument_method),
         'dump-stats':         ClientCmd(client, cmd_dump_stats),
+        'shutdown':           ClientCmd(client, cmd_shutdown),
     }
 
     try:

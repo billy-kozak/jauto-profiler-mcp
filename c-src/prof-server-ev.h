@@ -80,4 +80,8 @@ int ps_send_usr_rq_deinstrument_method(
 	const char *method_sig
 );
 
+int ps_send_shutdown_request(
+	struct prof_server *ps, int exit_code, const char *msg
+);
+
 #endif /* _PROF_SERVER_EV_H */

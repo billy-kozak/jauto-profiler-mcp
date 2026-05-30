@@ -27,6 +27,7 @@
 #include "class-info.h"
 #include "bytecode.h"
 #include "jni/jni-profiler.h"
+#include "jni/jni-system.h"
 #include "jni/bc-instrument.h"
 #include "util/log.h"
 
@@ -562,6 +563,21 @@ respond:
 	ps_usr_rq_deinstrument_method_dealloc(msg);
 }
 
+static void handle_shutdown_request(JNIEnv *jni_env, struct ps_msg *msg)
+{
+	int exit_code = msg->body.shutdown_request.exit_code;
+	char errmsg[PSM_SHUTDOWN_REQUEST_MSG_MAX];
+
+	memcpy(errmsg, msg->body.shutdown_request.msg, PSM_SHUTDOWN_REQUEST_MSG_MAX);
+	free(msg);
+
+	if (errmsg[0] != '\0') {
+		LOG_WARN("shutdown requested: %s", errmsg);
+	}
+
+	jni_system_exit(jni_env, exit_code);
+}
+
 static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 {
 	struct ps_msg *msg = (struct ps_msg *)raw;
@@ -588,6 +604,10 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 		break;
 	case PS_SHUTDOWN:
 		free(msg);
+		ret = 0;
+		break;
+	case PS_SHUTDOWN_REQUEST:
+		handle_shutdown_request(jni_env, msg);
 		ret = 0;
 		break;
 	default:

@@ -35,6 +35,7 @@ _MSG_TYPE_REQUEST_GET_STATS            = 6
 _MSG_TYPE_RESPONSE_GET_STATS           = 7
 _MSG_TYPE_REQUEST_DEINSTRUMENT_METHOD  = 8
 _MSG_TYPE_RESPONSE_DEINSTRUMENT_METHOD = 9
+_MSG_TYPE_REQUEST_SHUTDOWN             = 10
 
 _HDR_FMT  = "<II"
 _HDR_SIZE = struct.calcsize(_HDR_FMT)
@@ -205,6 +206,11 @@ class ProfClient:
         (status,) = struct.unpack_from("<I", body, 0)
         if status != 0:
             raise RuntimeError("deinstrument_method failed")
+
+    def shutdown(self) -> None:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.connect(self._path)
+            sock.sendall(struct.pack(_HDR_FMT, _MSG_TYPE_REQUEST_SHUTDOWN, 0))
 
     def get_class_methods(self, class_name: str) -> list[str]:
         name_bytes = class_name.encode("utf-8")
