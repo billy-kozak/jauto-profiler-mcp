@@ -27,12 +27,16 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 public class ProfilerRegistry {
 
+    private static final Logger LOGGER = Logger.init("profiler-registry");
 	private static final ProfilerRegistry INSTANCE = new ProfilerRegistry();
 
 	private final CopyOnWriteArrayList<ProfilerEntry> entries = new CopyOnWriteArrayList<>();
 	private final Thread collectorThread;
 
 	private ProfilerRegistry() {
+
+        LOGGER.info("Starting Registry");
+
 		collectorThread = new Thread(this::collect, "jauto-profiler-collector");
 		collectorThread.setDaemon(true);
 		collectorThread.start();
