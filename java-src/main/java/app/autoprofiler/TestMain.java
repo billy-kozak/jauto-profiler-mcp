@@ -36,11 +36,11 @@ class TestMain {
 	}
 
 	private static void countOdd(int i) {
-		System.out.println("Countdown Odd" + i);
+		System.out.println("Countdown Odd: " + i);
 	}
 
 	private static void countEven(int i) {
-		System.out.println("Countdown Even" + i);
+		System.out.println("Countdown Even: " + i);
 	}
 
 	public static void main(String[] args) throws InterruptedException {
