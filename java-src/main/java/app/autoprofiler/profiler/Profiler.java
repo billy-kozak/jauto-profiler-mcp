@@ -18,7 +18,7 @@
 
 package app.autoprofiler.profiler;
 
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
 
 public class Profiler {
 
@@ -26,8 +26,8 @@ public class Profiler {
     public final String methodSig;
     public volatile boolean active = true;
 
-    private final AtomicLong callCount = new AtomicLong(0);
-    private final AtomicLong totalNanos = new AtomicLong(0);
+    private final LongAdder callCount = new LongAdder();
+    private final LongAdder totalNanos = new LongAdder();
 
     /* [0] = re-entry depth, [1] = System.nanoTime() at outermost entry */
     private final ThreadLocal<long[]> threadState = ThreadLocal.withInitial(() -> new long[2]);
@@ -50,16 +50,16 @@ public class Profiler {
         state[0]--;
 
         if (state[0] == 0) {
-            totalNanos.addAndGet(System.nanoTime() - state[1]);
-            callCount.incrementAndGet();
+            totalNanos.add(System.nanoTime() - state[1]);
+            callCount.increment();
         }
     }
 
     public long getCallCount() {
-        return callCount.get();
+        return callCount.sum();
     }
 
     public long getTotalNanos() {
-        return totalNanos.get();
+        return totalNanos.sum();
     }
 }
