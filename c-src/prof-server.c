@@ -38,6 +38,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #define LOG_TAG "prof-server"
 
@@ -235,17 +236,27 @@ static unsigned char *build_instrumented_bytecode(
 	method_names  = malloc((size_t)count * sizeof(*method_names));
 	method_descs  = malloc((size_t)count * sizeof(*method_descs));
 	profiler_ids  = malloc((size_t)count * sizeof(*profiler_ids));
-	if (method_names == NULL || method_descs == NULL || profiler_ids == NULL) {
+
+	bool input_fail = (
+		method_names == NULL ||
+		method_descs == NULL ||
+		profiler_ids == NULL
+	);
+	if (input_fail) {
 		goto cleanup;
 	}
 
 	for (i = 0; i < (size_t)count; i++) {
-		const char *colon = strchr(ci->instrumented.arr[i].method_sig, ':');
+		const char *colon = strchr(
+			ci->instrumented.arr[i].method_sig, ':'
+		);
 		if (colon == NULL) {
 			LOG_ERROR("malformed method_sig in instrumented list");
 			goto cleanup;
 		}
-		total_name_buf += (size_t)(colon - ci->instrumented.arr[i].method_sig) + 1;
+		total_name_buf += (size_t)(
+			colon - ci->instrumented.arr[i].method_sig
+		) + 1;
 	}
 
 	name_buf = malloc(total_name_buf);
@@ -433,7 +444,11 @@ void ps_handle_retransform(
 		name, ps->pending.bytecode_len
 	);
 
-	memcpy(buf, (const void *)ps->pending.bytecode, ps->pending.bytecode_len);
+	memcpy(
+		buf,
+		(const void *)ps->pending.bytecode,
+		ps->pending.bytecode_len
+	);
 	*new_class_data = buf;
 	*new_class_data_len = (jint)ps->pending.bytecode_len;
 }
@@ -504,10 +519,11 @@ static void handle_usr_rq_deinstrument_method(
 		resp_body.status = DEINSTRUMENT_RP_FAIL;
 		goto respond;
 	}
+	struct instrumented_method_list *instrumented = &ci->instrumented;
 
-	for (i = 0; i < ci->instrumented.len; i++) {
-		if (strcmp(ci->instrumented.arr[i].method_sig, method_sig) == 0) {
-			profiler_id = ci->instrumented.arr[i].profiler_id;
+	for (i = 0; i < instrumented->len; i++) {
+		if (strcmp(instrumented->arr[i].method_sig, method_sig) == 0) {
+			profiler_id = instrumented->arr[i].profiler_id;
 			instrumented_method_list_remove_and_destroy(
 				&ci->instrumented, (int)i
 			);
@@ -523,7 +539,7 @@ static void handle_usr_rq_deinstrument_method(
 		goto respond;
 	}
 
-	if (ci->instrumented.len > 0) {
+	if (instrumented->len > 0) {
 		new_bc = build_instrumented_bytecode(jni_env, ci, &new_bc_len);
 		if (new_bc == NULL) {
 			resp_body.status = DEINSTRUMENT_RP_FAIL;
@@ -572,7 +588,11 @@ static void handle_shutdown_request(JNIEnv *jni_env, struct ps_msg *msg)
 	int exit_code = msg->body.shutdown_request.exit_code;
 	char errmsg[PSM_SHUTDOWN_REQUEST_MSG_MAX];
 
-	memcpy(errmsg, msg->body.shutdown_request.msg, PSM_SHUTDOWN_REQUEST_MSG_MAX);
+	memcpy(
+		errmsg,
+		msg->body.shutdown_request.msg,
+		PSM_SHUTDOWN_REQUEST_MSG_MAX
+	);
 	free(msg);
 
 	if (errmsg[0] != '\0') {
@@ -817,11 +837,11 @@ void ps_destroy(struct prof_server *ps)
 	size_t i;
 
 	if (ps->thread_running) {
-		struct ps_msg *shutdown = malloc(sizeof(*shutdown));
-		if (shutdown != NULL) {
-			shutdown->type = PS_SHUTDOWN;
-			if (evq_push(ps->ev_q, shutdown, sizeof(*shutdown)) != 0) {
-				free(shutdown);
+		struct ps_msg *sd = malloc(sizeof(*sd));
+		if (sd != NULL) {
+			sd->type = PS_SHUTDOWN;
+			if (evq_push(ps->ev_q, sd, sizeof(*sd)) != 0) {
+				free(sd);
 			}
 		}
 		sem_wait(&ps->shutdown_sem);
