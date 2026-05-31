@@ -79,6 +79,10 @@ def cmd_stat_summary(client, args):
     )
     print(json.dumps(result, indent=2))
 
+
+def cmd_resume(client, args):
+    print(client.resume())
+
 ###############################################################################
 # entry point
 ###############################################################################
@@ -136,6 +140,8 @@ def main():
     p.add_argument('start_time', metavar='start')
     p.add_argument('end_time', metavar='end', nargs='?', default='0')
 
+    sub.add_parser('resume', help='resume a JVM paused at startup')
+
     args = parser.parse_args()
 
     client = ProfClient(args.socket)
@@ -148,6 +154,7 @@ def main():
         'dump-stats':         ClientCmd(client, cmd_dump_stats),
         'stat-summary':       ClientCmd(client, cmd_stat_summary),
         'shutdown':           ClientCmd(client, cmd_shutdown),
+        'resume':             ClientCmd(client, cmd_resume),
     }
 
     try:

@@ -26,11 +26,12 @@
 struct prof_server;
 struct ps_msg;
 
-struct prof_server *ps_init();
+struct prof_server *ps_init(void);
 struct prof_server *ps_start(
 	struct prof_server *ps, jvmtiEnv *jvmti, JNIEnv *jni_env
 );
 void ps_destroy(struct prof_server *ps);
+void ps_wait_for_resume(struct prof_server *ps);
 int ps_send_ev(struct prof_server *ps, struct ps_msg *msg, size_t size);
 void ps_handle_retransform(
 	struct prof_server *ps,

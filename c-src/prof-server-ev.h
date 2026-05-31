@@ -43,6 +43,9 @@ int ps_send_usr_rq_loaded_classes(
 int ps_send_usr_rq_get_stats(
 	struct prof_server *ps, struct user_if_client *client
 );
+int ps_send_usr_rq_resume(
+	struct prof_server *ps, struct user_if_client *client
+);
 
 struct ps_msg *ps_usr_rq_class_methods_alloc(
 	struct user_if_client *client, const char *class_name

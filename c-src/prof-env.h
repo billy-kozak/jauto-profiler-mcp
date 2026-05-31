@@ -19,7 +19,9 @@
 #define _PROF_ENV_H
 
 #define SOCKET_ENV_VAR "JAUTO_PROF_SOCKET"
+#define PAUSE_ENV_VAR "JAUTO_PROF_PAUSE_ON_START"
 
 const char *prof_socket_path(void);
+int prof_pause_on_start(void);
 
 #endif /*_PROF_ENV_H */

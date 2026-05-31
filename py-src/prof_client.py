@@ -36,6 +36,12 @@ _MSG_TYPE_RESPONSE_GET_STATS           = 7
 _MSG_TYPE_REQUEST_DEINSTRUMENT_METHOD  = 8
 _MSG_TYPE_RESPONSE_DEINSTRUMENT_METHOD = 9
 _MSG_TYPE_REQUEST_SHUTDOWN             = 10
+_MSG_TYPE_REQUEST_RESUME               = 11
+_MSG_TYPE_RESPONSE_RESUME              = 12
+
+_RESUME_STATUS_UNBLOCKED = 0
+_RESUME_STATUS_NOCHANGE  = 1
+_RESUME_STATUS_ERROR     = 2
 
 _HDR_FMT  = "<II"
 _HDR_SIZE = struct.calcsize(_HDR_FMT)
@@ -211,6 +217,22 @@ class ProfClient:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
             sock.connect(self._path)
             sock.sendall(struct.pack(_HDR_FMT, _MSG_TYPE_REQUEST_SHUTDOWN, 0))
+
+    def resume(self) -> str:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.connect(self._path)
+            body = self._request_response(
+                sock,
+                _MSG_TYPE_REQUEST_RESUME,
+                b"",
+                _MSG_TYPE_RESPONSE_RESUME,
+            )
+        if len(body) < 4:
+            raise ValueError("resume response too short")
+        (status,) = struct.unpack_from("<I", body, 0)
+        if status == _RESUME_STATUS_ERROR:
+            raise RuntimeError("resume failed with error status")
+        return "unblocked" if status == _RESUME_STATUS_UNBLOCKED else "nochange"
 
     def get_class_methods(self, class_name: str) -> list[str]:
         name_bytes = class_name.encode("utf-8")

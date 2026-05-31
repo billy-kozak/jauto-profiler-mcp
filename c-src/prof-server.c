@@ -33,6 +33,7 @@
 
 #include <jvmti.h>
 #include <jni.h>
+#include <pthread.h>
 #include <semaphore.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -55,6 +56,9 @@ struct prof_server {
 	struct user_if *uif;
 	jvmtiEnv *jvmti;
 	sem_t shutdown_sem;
+	pthread_mutex_t resume_mutex;
+	pthread_cond_t resume_cond;
+	int paused;
 	size_t num_loaded_classes;
 	size_t classes_capacity;
 	struct class_info **loaded_classes;
@@ -578,6 +582,52 @@ static void handle_shutdown_request(JNIEnv *jni_env, struct ps_msg *msg)
 	jni_system_exit(jni_env, exit_code);
 }
 
+static int resume_vm(struct prof_server *ps)
+{
+	int was_paused;
+
+	pthread_mutex_lock(&ps->resume_mutex);
+	was_paused = ps->paused;
+	if (ps->paused) {
+		ps->paused = 0;
+		pthread_cond_signal(&ps->resume_cond);
+	}
+	pthread_mutex_unlock(&ps->resume_mutex);
+
+	return was_paused;
+}
+
+static void handle_usr_rq_resume(
+	struct prof_server *ps,
+	struct ps_msg *msg
+) {
+	struct user_if_client *client = msg->body.usr_rq_resume.client;
+	struct user_msg_resume_resp resp_body;
+	struct user_msg *response;
+
+	free(msg);
+
+	if (resume_vm(ps)) {
+		resp_body.status = RESUME_RP_UNBLOCKED;
+	} else {
+		resp_body.status = RESUME_RP_NOCHANGE;
+	}
+
+	response = malloc(offsetof(struct user_msg, body) + sizeof(resp_body));
+	if (response == NULL) {
+		uif_client_release(client);
+		return;
+	}
+
+	response->type = RESPONSE_RESUME;
+	response->size = sizeof(resp_body);
+	response->body.resume_resp = resp_body;
+
+	uif_send(ps->uif, client, response);
+	free(response);
+	uif_client_release(client);
+}
+
 static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 {
 	struct ps_msg *msg = (struct ps_msg *)raw;
@@ -601,6 +651,9 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 		break;
 	case USR_RQ_DEINSTRUMENT_METHOD:
 		handle_usr_rq_deinstrument_method(ps, jni_env, msg);
+		break;
+	case USR_RQ_RESUME:
+		handle_usr_rq_resume(ps, msg);
 		break;
 	case PS_SHUTDOWN:
 		free(msg);
@@ -661,6 +714,7 @@ struct prof_server *ps_init(void)
 	ps->pending = (struct pending_instrument){0};
 	ps->num_loaded_classes = 0;
 	ps->classes_capacity = PS_CLASSES_INITIAL_CAP;
+	ps->paused = prof_pause_on_start();
 	ps->loaded_classes = malloc(
 		PS_CLASSES_INITIAL_CAP * sizeof(*ps->loaded_classes)
 	);
@@ -672,9 +726,17 @@ struct prof_server *ps_init(void)
 		goto fail_classes;
 	}
 
+	if (pthread_mutex_init(&ps->resume_mutex, NULL) != 0) {
+		goto fail_sem;
+	}
+
+	if (pthread_cond_init(&ps->resume_cond, NULL) != 0) {
+		goto fail_mutex;
+	}
+
 	ps->ev_q = evq_init();
 	if (ps->ev_q == NULL) {
-		goto fail_sem;
+		goto fail_cond;
 	}
 
 	ps->uif = uif_init(prof_socket_path());
@@ -689,6 +751,10 @@ struct prof_server *ps_init(void)
 
 fail_queue:
 	evq_destroy(ps->ev_q);
+fail_cond:
+	pthread_cond_destroy(&ps->resume_cond);
+fail_mutex:
+	pthread_mutex_destroy(&ps->resume_mutex);
 fail_sem:
 	sem_destroy(&ps->shutdown_sem);
 fail_classes:
@@ -736,6 +802,16 @@ struct prof_server *ps_start(
 	return ps;
 }
 
+
+void ps_wait_for_resume(struct prof_server *ps)
+{
+	pthread_mutex_lock(&ps->resume_mutex);
+	while (ps->paused) {
+		pthread_cond_wait(&ps->resume_cond, &ps->resume_mutex);
+	}
+	pthread_mutex_unlock(&ps->resume_mutex);
+}
+
 void ps_destroy(struct prof_server *ps)
 {
 	size_t i;
@@ -758,6 +834,8 @@ void ps_destroy(struct prof_server *ps)
 	}
 	free(ps->loaded_classes);
 
+	pthread_cond_destroy(&ps->resume_cond);
+	pthread_mutex_destroy(&ps->resume_mutex);
 	sem_destroy(&ps->shutdown_sem);
 	evq_destroy(ps->ev_q);
 	free(ps);

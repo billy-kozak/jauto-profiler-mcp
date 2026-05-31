@@ -29,6 +29,7 @@ enum ps_msg_type {
 	USR_RQ_INSTRUMENT_METHOD,
 	USR_RQ_GET_STATS,
 	USR_RQ_DEINSTRUMENT_METHOD,
+	USR_RQ_RESUME,
 	PS_SHUTDOWN,
 	PS_SHUTDOWN_REQUEST,
 };
@@ -71,6 +72,10 @@ struct psm_usr_rq_deinstrument_method {
 	char *method_sig;
 };
 
+struct psm_usr_rq_resume {
+	struct user_if_client *client;
+};
+
 struct ps_msg {
 	enum ps_msg_type type;
 	union {
@@ -80,9 +85,8 @@ struct ps_msg {
 		struct psm_usr_rq_instrument_method usr_rq_instrument_method;
 		struct psm_usr_rq_get_stats usr_rq_get_stats;
 		struct psm_shutdown_request shutdown_request;
-
-		struct psm_usr_rq_deinstrument_method
-			usr_rq_deinstrument_method;
+		struct psm_usr_rq_deinstrument_method usr_rq_deinstrument_method;
+		struct psm_usr_rq_resume usr_rq_resume;
 	} body;
 };
 

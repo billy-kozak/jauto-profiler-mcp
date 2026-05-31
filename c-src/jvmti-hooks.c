@@ -81,7 +81,9 @@ static void JNICALL vm_init(
 	if (ps_start(server, jvmti_env, jni_env) == NULL) {
 		fprintf(stderr, "jauto-profiler: ps_start failed\n");
 		LOG_ERROR("ps_start failed");
+		return;
 	}
+	ps_wait_for_resume(server);
 }
 
 JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved)

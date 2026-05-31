@@ -45,6 +45,8 @@ enum user_msg_type {
 	REQUEST_DEINSTRUMENT_METHOD = 8,
 	RESPONSE_DEINSTRUMENT_METHOD = 9,
 	REQUEST_SHUTDOWN = 10,
+	REQUEST_RESUME = 11,
+	RESPONSE_RESUME = 12,
 };
 
 enum instrument_resp_status {
@@ -58,11 +60,21 @@ enum deinstrument_resp_status {
 	DEINSTRUMENT_RP_FAIL = 1,
 };
 
+enum resume_resp_status {
+	RESUME_RP_UNBLOCKED = 0,
+	RESUME_RP_NOCHANGE = 1,
+	RESUME_RP_ERROR = 2,
+};
+
 struct user_msg_instr_resp {
 	uint32_t status;
 };
 
 struct user_msg_deinstr_resp {
+	uint32_t status;
+};
+
+struct user_msg_resume_resp {
 	uint32_t status;
 };
 
@@ -80,6 +92,7 @@ struct PACKED user_msg {
 		uint8_t raw[A_FLEX];
 		struct user_msg_instr_resp instr_rep;
 		struct user_msg_deinstr_resp deinstr_resp;
+		struct user_msg_resume_resp resume_resp;
 	} body;
 };
 

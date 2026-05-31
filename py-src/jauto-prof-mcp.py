@@ -185,5 +185,30 @@ def shutdown_jvm() -> None:
     ProfClient().shutdown()
 
 
+@mcp.tool()
+def resume_application() -> str:
+    """Resume a JVM that was paused at startup by the profiler agent.
+
+    The agent pauses the JVM at VM initialization by default (before
+    main() runs), giving you a window to instrument methods before any
+    application code executes. This is essential for short-lived or
+    one-shot applications where the work you care about happens early.
+
+    Returns 'unblocked' if the JVM was paused and is now running, or
+    'nochange' if the JVM was already running. Raises on error.
+
+    Typical workflow for one-shot applications:
+      1. Start the JVM with the agent attached (it pauses automatically)
+      2. Call get_loaded_classes to find classes of interest
+      3. Call instrument_method for each method you want to profile
+      4. Call resume_application to let main() proceed
+      5. After the application exits, call get_profiler_stats
+
+    To disable the automatic pause, set JAUTO_PROF_PAUSE=0 in the
+    environment before launching the JVM.
+    """
+    return ProfClient().resume()
+
+
 if __name__ == "__main__":
     mcp.run()

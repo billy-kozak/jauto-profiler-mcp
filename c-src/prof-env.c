@@ -19,6 +19,7 @@
 #include "prof-env.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 const char *prof_socket_path(void)
 {
@@ -27,4 +28,13 @@ const char *prof_socket_path(void)
 		return path;
 	}
 	return "/tmp/jauto-profiler.sock";
+}
+
+int prof_pause_on_start(void)
+{
+	const char *val = getenv(PAUSE_ENV_VAR);
+	if (val == NULL) {
+		return 1;
+	}
+	return strcmp(val, "0") != 0;
 }
