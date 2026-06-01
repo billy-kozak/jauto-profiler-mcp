@@ -24,6 +24,7 @@
 #include "user-if.h"
 #include "ps-uif-handler.h"
 #include "prof-server-ev.h"
+#include "uif-response.h"
 #include "class-info.h"
 #include "bytecode.h"
 #include "jni/jni-profiler.h"
@@ -134,47 +135,13 @@ static void handle_usr_rq_loaded_classes(
 	struct ps_msg *msg
 ) {
 	struct user_if_client *client = msg->body.usr_rq_loaded_classes.client;
-	struct user_msg *response;
-	uint8_t *p;
-	uint32_t body_size;
-	uint32_t count;
-	size_t i;
 
 	free(msg);
 
-	body_size = sizeof(uint32_t);
-	for (i = 0; i < ps->num_loaded_classes; i++) {
-		body_size +=
-			sizeof(uint16_t) + strlen(ps->loaded_classes[i]->name);
-	}
-
-	response = malloc(offsetof(struct user_msg, body) + body_size);
-	if (response == NULL) {
-		uif_client_release(client);
-		return;
-	}
-
-	response->type = RESPONSE_LOADED_CLASSES;
-	response->size = body_size;
-
-	p = (uint8_t *)&response->body;
-
-	count = (uint32_t)ps->num_loaded_classes;
-	memcpy(p, &count, sizeof(count));
-	p += sizeof(count);
-
-	for (i = 0; i < ps->num_loaded_classes; i++) {
-		uint16_t name_len = (uint16_t)strlen(
-			ps->loaded_classes[i]->name
-		);
-		memcpy(p, &name_len, sizeof(name_len));
-		p += sizeof(name_len);
-		memcpy(p, ps->loaded_classes[i]->name, name_len);
-		p += name_len;
-	}
-
-	uif_send(ps->uif, client, response);
-	free(response);
+	uif_respond_loaded_classes(
+		ps->uif, client,
+		ps->loaded_classes, ps->num_loaded_classes
+	);
 	uif_client_release(client);
 }
 
@@ -182,46 +149,12 @@ static void handle_usr_rq_class_methods(
 	struct prof_server *ps,
 	struct ps_msg *msg
 ) {
-	struct user_if_client *client = msg->body.usr_rq_class_methods.client;
 	const char *class_name = msg->body.usr_rq_class_methods.class_name;
 	struct class_info *ci = find_class_by_name(ps, class_name);
-	struct user_msg *response;
-	uint8_t *p;
-	uint32_t body_size;
-	uint32_t count;
-	size_t i;
 
-	body_size = sizeof(uint32_t);
-	if (ci != NULL) {
-		for (i = 0; i < ci->methods.len; i++) {
-			body_size += pstring_total_size(ci->methods.arr[i]);
-		}
-	}
-	count = (ci != NULL) ? (uint32_t)ci->methods.len : 0;
-
-	response = malloc(offsetof(struct user_msg, body) + body_size);
-	if (response == NULL) {
-		ps_usr_rq_class_methods_dealloc(msg);
-		return;
-	}
-
-	response->type = RESPONSE_CLASS_METHODS;
-	response->size = body_size;
-
-	p = response->body.raw;
-	memcpy(p, &count, sizeof(count));
-	p += sizeof(count);
-
-	if (ci != NULL) {
-		for (i = 0; i < ci->methods.len; i++) {
-			size_t sz = pstring_total_size(ci->methods.arr[i]);
-			memcpy(p, ci->methods.arr[i], sz);
-			p += sz;
-		}
-	}
-
-	uif_send(ps->uif, client, response);
-	free(response);
+	uif_respond_class_methods(
+		ps->uif, msg->body.usr_rq_class_methods.client, ci
+	);
 	ps_usr_rq_class_methods_dealloc(msg);
 }
 
@@ -295,8 +228,7 @@ static void handle_usr_rq_instrument_method(
 
 	const char *class_name = msg->body.usr_rq_instrument_method.class_name;
 	const char *method_sig = msg->body.usr_rq_instrument_method.method_sig;
-	struct user_msg_instr_resp resp_body = {INSTRUMENT_RP_ERROR};
-	struct user_msg *response;
+	enum instrument_resp_status resp_status = INSTRUMENT_RP_ERROR;
 	struct class_info *ci = NULL;
 	struct instrumented_method *im = NULL;
 	unsigned char *new_bc = NULL;
@@ -305,7 +237,7 @@ static void handle_usr_rq_instrument_method(
 
 	id = jni_create_profiler(jni_env, class_name, method_sig);
 	if (id == -1) {
-		resp_body.status = INSTRUMENT_RP_DOUBLE_INSTRUMENT;
+		resp_status = INSTRUMENT_RP_DOUBLE_INSTRUMENT;
 		goto respond;
 	}
 	if (id < 0) {
@@ -342,7 +274,7 @@ static void handle_usr_rq_instrument_method(
 		goto fail_cleanup_instrumented;
 	}
 
-	resp_body.status = INSTRUMENT_RP_OK;
+	resp_status = INSTRUMENT_RP_OK;
 	goto respond;
 
 fail_cleanup_instrumented:
@@ -353,18 +285,7 @@ fail_cleanup_profiler:
 	jni_remove_profiler(jni_env, id);
 respond:
 	free(new_bc);
-	response = malloc(offsetof(struct user_msg, body) + sizeof(resp_body));
-	if (response == NULL) {
-		ps_usr_rq_instrument_method_dealloc(msg);
-		return;
-	}
-
-	response->type = RESPONSE_INSTRUMENT_METHOD;
-	response->size = sizeof(resp_body);
-	response->body.instr_rep = resp_body;
-
-	uif_send(ps->uif, client, response);
-	free(response);
+	uif_respond_instrument(ps->uif, client, resp_status);
 	ps_usr_rq_instrument_method_dealloc(msg);
 }
 
@@ -411,7 +332,6 @@ static void handle_usr_rq_get_stats(
 	struct ps_msg *msg
 ) {
 	struct user_if_client *client = msg->body.usr_rq_get_stats.client;
-	struct user_msg *response;
 	uint8_t *stats_buf = NULL;
 	size_t stats_len = 0;
 
@@ -423,20 +343,8 @@ static void handle_usr_rq_get_stats(
 		return;
 	}
 
-	response = malloc(offsetof(struct user_msg, body) + stats_len);
-	if (response == NULL) {
-		free(stats_buf);
-		uif_client_release(client);
-		return;
-	}
-
-	response->type = RESPONSE_GET_STATS;
-	response->size = (uint32_t)stats_len;
-	memcpy(response->body.raw, stats_buf, stats_len);
+	uif_respond_get_stats(ps->uif, client, stats_buf, stats_len);
 	free(stats_buf);
-
-	uif_send(ps->uif, client, response);
-	free(response);
 	uif_client_release(client);
 }
 
@@ -452,20 +360,20 @@ static void handle_usr_rq_deinstrument_method(
 	struct user_if_client *client =
 		msg->body.usr_rq_deinstrument_method.client;
 
-	struct user_msg *response;
 	struct class_info *ci = find_class_by_name(ps, class_name);
 	unsigned char *new_bc = NULL;
 	size_t new_bc_len;
-	struct user_msg_deinstr_resp resp_body = {DEINSTRUMENT_RP_OK};
+	enum deinstrument_resp_status resp_status = DEINSTRUMENT_RP_OK;
 	int profiler_id = -1;
 	size_t i;
 
 	if (ci == NULL) {
 		LOG_WARN("deinstrument: class not found: %s", class_name);
-		resp_body.status = DEINSTRUMENT_RP_FAIL;
+		resp_status = DEINSTRUMENT_RP_FAIL;
 		goto respond;
 	}
 	struct instrumented_method_list *instrumented = &ci->instrumented;
+
 
 	for (i = 0; i < instrumented->len; i++) {
 		if (strcmp(instrumented->arr[i].method_sig, method_sig) == 0) {
@@ -481,21 +389,21 @@ static void handle_usr_rq_deinstrument_method(
 			"deinstrument: %s not instrumented in %s",
 			method_sig, class_name
 		);
-		resp_body.status = DEINSTRUMENT_RP_FAIL;
+		resp_status = DEINSTRUMENT_RP_FAIL;
 		goto respond;
 	}
 
 	if (instrumented->len > 0) {
 		new_bc = do_method_instrumentation(jni_env, ci, &new_bc_len);
 		if (new_bc == NULL) {
-			resp_body.status = DEINSTRUMENT_RP_FAIL;
+			resp_status = DEINSTRUMENT_RP_FAIL;
 			goto cleanup_profiler;
 		}
 		if (retransform_pending(
 			ps, jni_env, class_name, NULL, new_bc, new_bc_len, -1
 		) != 0) {
 			LOG_ERROR("deinstrument retransform failed");
-			resp_body.status = DEINSTRUMENT_RP_FAIL;
+			resp_status = DEINSTRUMENT_RP_FAIL;
 		}
 	} else {
 		if (retransform_pending(
@@ -503,7 +411,7 @@ static void handle_usr_rq_deinstrument_method(
 			ci->bytecode, ci->bytecode_len, -1
 		) != 0) {
 			LOG_ERROR("deinstrument retransform failed");
-			resp_body.status = DEINSTRUMENT_RP_FAIL;
+			resp_status = DEINSTRUMENT_RP_FAIL;
 		}
 	}
 
@@ -514,18 +422,7 @@ cleanup_profiler:
 
 respond:
 	free(new_bc);
-	response = malloc(offsetof(struct user_msg, body) + sizeof(resp_body));
-	if (response == NULL) {
-		ps_usr_rq_deinstrument_method_dealloc(msg);
-		return;
-	}
-
-	response->type = RESPONSE_DEINSTRUMENT_METHOD;
-	response->size = sizeof(resp_body);
-	memcpy(&response->body.deinstr_resp, &resp_body, response->size);
-
-	uif_send(ps->uif, client, response);
-	free(response);
+	uif_respond_deinstrument(ps->uif, client, resp_status);
 	ps_usr_rq_deinstrument_method_dealloc(msg);
 }
 
@@ -568,29 +465,12 @@ static void handle_usr_rq_resume(
 	struct ps_msg *msg
 ) {
 	struct user_if_client *client = msg->body.usr_rq_resume.client;
-	struct user_msg_resume_resp resp_body;
-	struct user_msg *response;
+	enum resume_resp_status status;
 
 	free(msg);
 
-	if (resume_vm(ps)) {
-		resp_body.status = RESUME_RP_UNBLOCKED;
-	} else {
-		resp_body.status = RESUME_RP_NOCHANGE;
-	}
-
-	response = malloc(offsetof(struct user_msg, body) + sizeof(resp_body));
-	if (response == NULL) {
-		uif_client_release(client);
-		return;
-	}
-
-	response->type = RESPONSE_RESUME;
-	response->size = sizeof(resp_body);
-	response->body.resume_resp = resp_body;
-
-	uif_send(ps->uif, client, response);
-	free(response);
+	status = resume_vm(ps) ? RESUME_RP_UNBLOCKED : RESUME_RP_NOCHANGE;
+	uif_respond_resume(ps->uif, client, status);
 	uif_client_release(client);
 }
 
