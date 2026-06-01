@@ -88,6 +88,20 @@ static int add_class(struct prof_server *ps, struct class_info *ci)
 	return 0;
 }
 
+static struct class_info *find_class_by_name(
+	const struct prof_server *ps,
+	const char *name
+) {
+	size_t i;
+
+	for (i = 0; i < ps->num_loaded_classes; i++) {
+		if (strcmp(ps->loaded_classes[i]->name, name) == 0) {
+			return ps->loaded_classes[i];
+		}
+	}
+	return NULL;
+}
+
 static void handle_class_loaded(
 	struct prof_server *ps,
 	struct ps_msg *msg
@@ -170,19 +184,12 @@ static void handle_usr_rq_class_methods(
 ) {
 	struct user_if_client *client = msg->body.usr_rq_class_methods.client;
 	const char *class_name = msg->body.usr_rq_class_methods.class_name;
-	struct class_info *ci = NULL;
+	struct class_info *ci = find_class_by_name(ps, class_name);
 	struct user_msg *response;
 	uint8_t *p;
 	uint32_t body_size;
 	uint32_t count;
 	size_t i;
-
-	for (i = 0; i < ps->num_loaded_classes; i++) {
-		if (strcmp(ps->loaded_classes[i]->name, class_name) == 0) {
-			ci = ps->loaded_classes[i];
-			break;
-		}
-	}
 
 	body_size = sizeof(uint32_t);
 	if (ci != NULL) {
@@ -295,7 +302,6 @@ static void handle_usr_rq_instrument_method(
 	unsigned char *new_bc = NULL;
 	size_t new_bc_len;
 	int id;
-	size_t i;
 
 	id = jni_create_profiler(jni_env, class_name, method_sig);
 	if (id == -1) {
@@ -307,12 +313,7 @@ static void handle_usr_rq_instrument_method(
 		goto respond;
 	}
 
-	for (i = 0; i < ps->num_loaded_classes; i++) {
-		if (strcmp(ps->loaded_classes[i]->name, class_name) == 0) {
-			ci = ps->loaded_classes[i];
-			break;
-		}
-	}
+	ci = find_class_by_name(ps, class_name);
 	if (ci == NULL) {
 		LOG_WARN("instrument: class not found: %s", class_name);
 		goto fail_cleanup_profiler;
@@ -452,19 +453,13 @@ static void handle_usr_rq_deinstrument_method(
 		msg->body.usr_rq_deinstrument_method.client;
 
 	struct user_msg *response;
-	struct class_info *ci = NULL;
+	struct class_info *ci = find_class_by_name(ps, class_name);
 	unsigned char *new_bc = NULL;
 	size_t new_bc_len;
 	struct user_msg_deinstr_resp resp_body = {DEINSTRUMENT_RP_OK};
 	int profiler_id = -1;
 	size_t i;
 
-	for (i = 0; i < ps->num_loaded_classes; i++) {
-		if (strcmp(ps->loaded_classes[i]->name, class_name) == 0) {
-			ci = ps->loaded_classes[i];
-			break;
-		}
-	}
 	if (ci == NULL) {
 		LOG_WARN("deinstrument: class not found: %s", class_name);
 		resp_body.status = DEINSTRUMENT_RP_FAIL;
