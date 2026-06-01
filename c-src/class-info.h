@@ -65,6 +65,9 @@ struct class_info *ci_alloc(
 	struct method_list *methods
 );
 void ci_free(struct class_info *ci);
+int ci_remove_instrumented_by_sig(
+	struct class_info *ci, const char *method_sig
+);
 
 struct class_instrument_params {
 	const unsigned char *class_data;

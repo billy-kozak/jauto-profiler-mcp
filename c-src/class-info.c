@@ -124,6 +124,22 @@ fail:
 	return NULL;
 }
 
+int ci_remove_instrumented_by_sig(
+	struct class_info *ci, const char *method_sig
+) {
+	struct instrumented_method_list *list = &ci->instrumented;
+	size_t i;
+
+	for (i = 0; i < list->len; i++) {
+		if (strcmp(list->arr[i].method_sig, method_sig) == 0) {
+			int id = list->arr[i].profiler_id;
+			instrumented_method_list_remove_and_destroy(list, (int)i);
+			return id;
+		}
+	}
+	return -1;
+}
+
 void ci_free(struct class_info *ci)
 {
 	free(ci->name);

@@ -327,26 +327,15 @@ static void handle_usr_rq_deinstrument_method(
 	unsigned char *new_bc = NULL;
 	size_t new_bc_len;
 	enum deinstrument_resp_status resp_status = DEINSTRUMENT_RP_OK;
-	int profiler_id = -1;
-	size_t i;
+	int profiler_id;
 
 	if (ci == NULL) {
 		LOG_WARN("deinstrument: class not found: %s", class_name);
 		resp_status = DEINSTRUMENT_RP_FAIL;
 		goto respond;
 	}
-	struct instrumented_method_list *instrumented = &ci->instrumented;
 
-
-	for (i = 0; i < instrumented->len; i++) {
-		if (strcmp(instrumented->arr[i].method_sig, method_sig) == 0) {
-			profiler_id = instrumented->arr[i].profiler_id;
-			instrumented_method_list_remove_and_destroy(
-				&ci->instrumented, (int)i
-			);
-			break;
-		}
-	}
+	profiler_id = ci_remove_instrumented_by_sig(ci, method_sig);
 	if (profiler_id == -1) {
 		LOG_WARN(
 			"deinstrument: %s not instrumented in %s",
@@ -356,7 +345,7 @@ static void handle_usr_rq_deinstrument_method(
 		goto respond;
 	}
 
-	if (instrumented->len > 0) {
+	if (ci->instrumented.len > 0) {
 		new_bc = do_method_instrumentation(jni_env, ci, &new_bc_len);
 		if (new_bc == NULL) {
 			resp_status = DEINSTRUMENT_RP_FAIL;
