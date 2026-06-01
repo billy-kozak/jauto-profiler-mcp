@@ -218,69 +218,24 @@ static void handle_usr_rq_class_methods(
 	ps_usr_rq_class_methods_dealloc(msg);
 }
 
-static unsigned char *build_instrumented_bytecode(
+static unsigned char *do_method_instrumentation(
 	JNIEnv *jni_env,
 	const struct class_info *ci,
 	size_t *new_bc_len_out
 ) {
-	int count = (int)ci->instrumented.len;
-	const char **method_names = NULL;
-	const char **method_descs = NULL;
-	int *profiler_ids = NULL;
-	char *name_buf = NULL;
-	unsigned char *result = NULL;
-	size_t total_name_buf = 0;
-	size_t i;
-	char *p;
+	struct class_instrument_params *params;
+	unsigned char *result;
 
-	method_names  = malloc((size_t)count * sizeof(*method_names));
-	method_descs  = malloc((size_t)count * sizeof(*method_descs));
-	profiler_ids  = malloc((size_t)count * sizeof(*profiler_ids));
-
-	bool input_fail = (
-		method_names == NULL ||
-		method_descs == NULL ||
-		profiler_ids == NULL
-	);
-	if (input_fail) {
-		goto cleanup;
-	}
-
-	for (i = 0; i < (size_t)count; i++) {
-		const char *colon = strchr(
-			ci->instrumented.arr[i].method_sig, ':'
-		);
-		if (colon == NULL) {
-			LOG_ERROR("malformed method_sig in instrumented list");
-			goto cleanup;
-		}
-		total_name_buf += (size_t)(
-			colon - ci->instrumented.arr[i].method_sig
-		) + 1;
-	}
-
-	name_buf = malloc(total_name_buf);
-	if (name_buf == NULL) {
-		goto cleanup;
-	}
-
-	p = name_buf;
-	for (i = 0; i < (size_t)count; i++) {
-		const char *sig   = ci->instrumented.arr[i].method_sig;
-		const char *colon = strchr(sig, ':');
-		size_t name_len   = (size_t)(colon - sig);
-		memcpy(p, sig, name_len);
-		p[name_len]     = '\0';
-		method_names[i] = p;
-		method_descs[i] = colon + 1;
-		profiler_ids[i] = ci->instrumented.arr[i].profiler_id;
-		p += name_len + 1;
+	params = class_instrument_params_alloc(ci);
+	if (params == NULL) {
+		return NULL;
 	}
 
 	result = bc_instrument_method(
 		jni_env,
-		ci->bytecode, ci->bytecode_len,
-		method_names, method_descs, profiler_ids, count,
+		params->class_data, params->class_data_len,
+		params->method_names, params->method_descs,
+		params->profiler_ids, params->count,
 		new_bc_len_out
 	);
 
@@ -288,11 +243,7 @@ static unsigned char *build_instrumented_bytecode(
 		LOG_ERROR("bc_instrument_method failed");
 	}
 
-cleanup:
-	free(name_buf);
-	free(method_names);
-	free(method_descs);
-	free(profiler_ids);
+	class_instrument_params_free(params);
 	return result;
 }
 
@@ -379,7 +330,7 @@ static void handle_usr_rq_instrument_method(
 		goto fail_cleanup_profiler;
 	}
 
-	new_bc = build_instrumented_bytecode(jni_env, ci, &new_bc_len);
+	new_bc = do_method_instrumentation(jni_env, ci, &new_bc_len);
 	if (new_bc == NULL) {
 		goto fail_cleanup_instrumented;
 	}
@@ -540,7 +491,7 @@ static void handle_usr_rq_deinstrument_method(
 	}
 
 	if (instrumented->len > 0) {
-		new_bc = build_instrumented_bytecode(jni_env, ci, &new_bc_len);
+		new_bc = do_method_instrumentation(jni_env, ci, &new_bc_len);
 		if (new_bc == NULL) {
 			resp_body.status = DEINSTRUMENT_RP_FAIL;
 			goto cleanup_profiler;

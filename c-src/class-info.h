@@ -66,4 +66,19 @@ struct class_info *ci_alloc(
 );
 void ci_free(struct class_info *ci);
 
+struct class_instrument_params {
+	const unsigned char *class_data;
+	size_t class_data_len;
+	const char **method_names;
+	const char **method_descs;
+	int *profiler_ids;
+	int count;
+	char *name_buf;
+};
+
+struct class_instrument_params *class_instrument_params_alloc(
+	const struct class_info *ci
+);
+void class_instrument_params_free(struct class_instrument_params *params);
+
 #endif /* _CLASS_INFO_H */

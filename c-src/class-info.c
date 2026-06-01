@@ -19,7 +19,11 @@
 #include "class-info.h"
 
 #include "util/dyn-arr.h"
+#include "util/log.h"
 
+#define LOG_TAG "class-info"
+
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -127,4 +131,97 @@ void ci_free(struct class_info *ci)
 	method_list_deep_destroy(&ci->methods);
 	instrumented_method_list_deep_destroy(&ci->instrumented);
 	free(ci);
+}
+
+struct class_instrument_params *class_instrument_params_alloc(
+	const struct class_info *ci
+) {
+	struct class_instrument_params *p;
+	int count = (int)ci->instrumented.len;
+	size_t total_buf = 0;
+	char *buf;
+	size_t i;
+
+	p = malloc(sizeof(*p));
+	if (p == NULL) {
+		return NULL;
+	}
+
+	p->class_data = ci->bytecode;
+	p->class_data_len = ci->bytecode_len;
+	p->count = count;
+	p->method_names = NULL;
+	p->method_descs = NULL;
+	p->profiler_ids = NULL;
+	p->name_buf = NULL;
+
+	p->method_names = malloc((size_t)count * sizeof(*p->method_names));
+	p->method_descs = malloc((size_t)count * sizeof(*p->method_descs));
+	p->profiler_ids = malloc((size_t)count * sizeof(*p->profiler_ids));
+
+	bool alloc_failed = (
+		p->method_names == NULL ||
+		p->method_descs == NULL ||
+		p->profiler_ids == NULL
+	);
+	if (alloc_failed) {
+		goto fail;
+	}
+
+	for (i = 0; i < (size_t)count; i++) {
+		const char *colon = strchr(
+			ci->instrumented.arr[i].method_sig, ':'
+		);
+		if (colon == NULL) {
+			LOG_ERROR("malformed method_sig in instrumented list");
+			goto fail;
+		}
+		total_buf += (size_t)(
+			colon - ci->instrumented.arr[i].method_sig
+		) + 1;
+		total_buf += strlen(colon + 1) + 1;
+	}
+
+	buf = malloc(total_buf);
+	if (buf == NULL) {
+		goto fail;
+	}
+	p->name_buf = buf;
+
+	for (i = 0; i < (size_t)count; i++) {
+		const char *sig = ci->instrumented.arr[i].method_sig;
+		const char *colon = strchr(sig, ':');
+		size_t name_len = (size_t)(colon - sig);
+		size_t desc_len = strlen(colon + 1);
+
+		memcpy(buf, sig, name_len);
+		buf[name_len] = '\0';
+		p->method_names[i] = buf;
+		buf += name_len + 1;
+
+		memcpy(buf, colon + 1, desc_len);
+		buf[desc_len] = '\0';
+		p->method_descs[i] = buf;
+		buf += desc_len + 1;
+
+		p->profiler_ids[i] = ci->instrumented.arr[i].profiler_id;
+	}
+
+	return p;
+
+fail:
+	class_instrument_params_free(p);
+	return NULL;
+}
+
+void class_instrument_params_free(struct class_instrument_params *params)
+{
+	if (params == NULL) {
+		return;
+	}
+	free(params->name_buf);
+	free(params->method_names);
+	free(params->method_descs);
+	free(params->profiler_ids);
+	free(params);
 }
