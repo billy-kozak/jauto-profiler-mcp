@@ -46,22 +46,74 @@ _RESUME_STATUS_ERROR     = 2
 _HDR_FMT  = "<II"
 _HDR_SIZE = struct.calcsize(_HDR_FMT)
 
+_STATUS_RESP_FMT  = _HDR_FMT + "I"   # msg_type, body_size, status
+_STATUS_RESP_SIZE = struct.calcsize(_STATUS_RESP_FMT)
+
+_PSTR_LEN_FMT  = "<H"
+_PSTR_LEN_SIZE = struct.calcsize(_PSTR_LEN_FMT)
+
+_SNAPSHOT_FMT  = "<qqq"              # timestamp, call_count, total_nanos
+_SNAPSHOT_SIZE = struct.calcsize(_SNAPSHOT_FMT)
+
+
+class RawMsg:
+
+    def __init__(self, message_type: int, message_len: int, raw_body: bytes):
+        self.message_type = message_type
+        self.message_len = message_len
+        self.raw_body = raw_body
+
+
+class pstring:
+
+    def __init__(self, buf: bytes, offset: int = 0):
+
+        if offset + _PSTR_LEN_SIZE > len(buf):
+            raise ValueError("truncated pstring length")
+
+        (length,) = struct.unpack_from(_PSTR_LEN_FMT, buf, offset)
+        start = offset + _PSTR_LEN_SIZE
+
+        if start + length > len(buf):
+            raise ValueError("truncated pstring data")
+
+        self.value = buf[start:start + length].decode("utf-8", errors="replace")
+        self.size = _PSTR_LEN_SIZE + length
+
+    @classmethod
+    def pack(cls, s: str) -> bytes:
+        encoded = s.encode("utf-8")
+        return struct.pack(_PSTR_LEN_FMT, len(encoded)) + encoded
+
 
 class ProfClient:
 
     def __init__(self, path: str | None = None):
+
         if path is None:
             path = os.environ.get(SOCKET_ENV_VAR, DEFAULT_SOCKET_PATH)
         self._path = path
 
-    def _recv_exact(self, sock: socket.socket, n: int) -> bytes:
-        buf = bytearray()
-        while len(buf) < n:
-            chunk = sock.recv(n - len(buf))
+    def _recv_msg(self, sock: socket.socket) -> bytes:
+
+        hdr = bytearray()
+
+        while len(hdr) < _HDR_SIZE:
+            chunk = sock.recv(_HDR_SIZE - len(hdr))
             if not chunk:
                 raise ConnectionError("connection closed before full message received")
-            buf.extend(chunk)
-        return bytes(buf)
+            hdr.extend(chunk)
+
+        message_type, body_size = struct.unpack(_HDR_FMT, bytes(hdr))
+        body = bytearray()
+
+        while len(body) < body_size:
+            chunk = sock.recv(body_size - len(body))
+            if not chunk:
+                raise ConnectionError("connection closed before full message received")
+            body.extend(chunk)
+
+        return RawMsg(message_type, body_size, bytes(body))
 
     def _parse_string_list(self, body: bytes) -> list[str]:
         if len(body) < 4:
@@ -72,34 +124,26 @@ class ProfClient:
         items = []
 
         for _ in range(count):
-            if offset + 2 > len(body):
-                raise ValueError("truncated entry")
-            (item_len,) = struct.unpack_from("<H", body, offset)
-            offset += 2
-            if offset + item_len > len(body):
-                raise ValueError("truncated string")
-            items.append(body[offset:offset + item_len].decode("utf-8", errors="replace"))
-            offset += item_len
+            ps = pstring(body, offset)
+            items.append(ps.value)
+            offset += ps.size
 
         return items
 
-    def _request_response(
+    def _send_request(
         self,
-        sock: socket.socket,
         req_type: int,
-        body: bytes,
-        expected_resp_type: int,
-    ) -> bytes:
+        body: bytes = b"",
+    ) -> RawMsg:
+
         hdr = struct.pack(_HDR_FMT, req_type, len(body))
-        sock.sendall(hdr + body)
 
-        resp_hdr = self._recv_exact(sock, _HDR_SIZE)
-        resp_type, resp_size = struct.unpack(_HDR_FMT, resp_hdr)
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.connect(self._path)
+            sock.sendall(hdr + body)
+            msg = self._recv_msg(sock)
 
-        if resp_type != expected_resp_type:
-            raise ValueError(f"unexpected response type {resp_type}")
-
-        return self._recv_exact(sock, resp_size) if resp_size > 0 else b""
+        return msg
 
     def _parse_stats(self, body: bytes) -> list[dict]:
         if len(body) < 4:
@@ -110,29 +154,24 @@ class ProfClient:
         result = []
 
         for _ in range(count):
-            (class_len,) = struct.unpack_from("<H", body, offset)
-            offset += 2
-            class_name = body[offset:offset + class_len].decode(
-                "utf-8", errors="replace"
-            )
-            offset += class_len
+            class_ps = pstring(body, offset)
+            class_name = class_ps.value
+            offset += class_ps.size
 
-            (sig_len,) = struct.unpack_from("<H", body, offset)
-            offset += 2
-            method_sig = body[offset:offset + sig_len].decode(
-                "utf-8", errors="replace"
-            )
-            offset += sig_len
+            sig_ps = pstring(body, offset)
+            method_sig = sig_ps.value
+            offset += sig_ps.size
 
             (snap_count,) = struct.unpack_from("<I", body, offset)
             offset += 4
 
             snapshots = []
+
             for _ in range(snap_count):
                 ts, call_count, total_nanos = struct.unpack_from(
-                    "<qqq", body, offset
+                    _SNAPSHOT_FMT, body, offset
                 )
-                offset += 24
+                offset += _SNAPSHOT_SIZE
                 snapshots.append({
                     "timestamp": ts,
                     "call_count": call_count,
@@ -148,104 +187,97 @@ class ProfClient:
         return result
 
     def get_stats(self) -> list[dict]:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.connect(self._path)
-            body = self._request_response(
-                sock,
-                _MSG_TYPE_REQUEST_GET_STATS,
-                b"",
-                _MSG_TYPE_RESPONSE_GET_STATS,
-            )
-        return self._parse_stats(body)
+
+        resp = self._send_request(
+            _MSG_TYPE_REQUEST_GET_STATS,
+        )
+
+        if resp.message_type != _MSG_TYPE_RESPONSE_GET_STATS:
+            raise ValueError("Unexpected response")
+
+        return self._parse_stats(resp.raw_body)
 
     def list_loaded_classes(self) -> list[str]:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.connect(self._path)
-            body = self._request_response(
-                sock,
-                _MSG_TYPE_REQUEST_LOADED_CLASSES,
-                b"",
-                _MSG_TYPE_RESPONSE_LOADED_CLASSES,
-            )
-        return self._parse_string_list(body)
+        resp = self._send_request(
+            _MSG_TYPE_REQUEST_LOADED_CLASSES,
+        )
+
+        if resp.message_type != _MSG_TYPE_RESPONSE_LOADED_CLASSES:
+            raise ValueError("Unexpected response")
+
+        return self._parse_string_list(resp.raw_body)
 
     def instrument_method(self, class_name: str, method_sig: str) -> None:
-        name_bytes = class_name.encode("utf-8")
-        sig_bytes = method_sig.encode("utf-8")
-        req_body = (
-            struct.pack("<H", len(name_bytes)) + name_bytes +
-            struct.pack("<H", len(sig_bytes)) + sig_bytes
+
+        body = pstring.pack(class_name) + pstring.pack(method_sig)
+
+        resp = self._send_request(
+            _MSG_TYPE_REQUEST_INSTRUMENT_METHOD,
+            body
         )
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.connect(self._path)
-            body = self._request_response(
-                sock,
-                _MSG_TYPE_REQUEST_INSTRUMENT_METHOD,
-                req_body,
-                _MSG_TYPE_RESPONSE_INSTRUMENT_METHOD,
-            )
-        if len(body) < 4:
-            raise ValueError("instrument_method response too short")
-        (status,) = struct.unpack_from("<I", body, 0)
+
+        if resp.message_type != _MSG_TYPE_RESPONSE_INSTRUMENT_METHOD:
+            raise ValueError("Unexpected response")
+
+        (status,) = struct.unpack("<I", resp.raw_body)
+
         if status == 1:
             raise RuntimeError("method is already instrumented")
+
         if status != 0:
             raise RuntimeError("instrument_method failed")
 
     def deinstrument_method(self, class_name: str, method_sig: str) -> None:
-        name_bytes = class_name.encode("utf-8")
-        sig_bytes = method_sig.encode("utf-8")
-        req_body = (
-            struct.pack("<H", len(name_bytes)) + name_bytes +
-            struct.pack("<H", len(sig_bytes)) + sig_bytes
+
+        body = pstring.pack(class_name) + pstring.pack(method_sig)
+
+        resp = self._send_request(
+            _MSG_TYPE_REQUEST_DEINSTRUMENT_METHOD,
+            body
         )
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.connect(self._path)
-            body = self._request_response(
-                sock,
-                _MSG_TYPE_REQUEST_DEINSTRUMENT_METHOD,
-                req_body,
-                _MSG_TYPE_RESPONSE_DEINSTRUMENT_METHOD,
-            )
-        if len(body) < 4:
-            raise ValueError("deinstrument_method response too short")
-        (status,) = struct.unpack_from("<I", body, 0)
+
+        if resp.message_type != _MSG_TYPE_RESPONSE_DEINSTRUMENT_METHOD:
+            raise ValueError("Unexpected response")
+
+        (status,) = struct.unpack("<I", resp.raw_body)
+
         if status != 0:
             raise RuntimeError("deinstrument_method failed")
 
     def shutdown(self) -> None:
+
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
             sock.connect(self._path)
             sock.sendall(struct.pack(_HDR_FMT, _MSG_TYPE_REQUEST_SHUTDOWN, 0))
 
     def resume(self) -> str:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.connect(self._path)
-            body = self._request_response(
-                sock,
-                _MSG_TYPE_REQUEST_RESUME,
-                b"",
-                _MSG_TYPE_RESPONSE_RESUME,
-            )
-        if len(body) < 4:
-            raise ValueError("resume response too short")
-        (status,) = struct.unpack_from("<I", body, 0)
+
+        resp = self._send_request(
+            _MSG_TYPE_REQUEST_RESUME,
+        )
+
+        if resp.message_type != _MSG_TYPE_RESPONSE_RESUME:
+            raise ValueError("Unexpected response")
+
+        (status,) = struct.unpack("<I", resp.raw_body)
+
         if status == _RESUME_STATUS_ERROR:
             raise RuntimeError("resume failed with error status")
+
         return "unblocked" if status == _RESUME_STATUS_UNBLOCKED else "nochange"
 
     def get_class_methods(self, class_name: str) -> list[str]:
-        name_bytes = class_name.encode("utf-8")
-        req_body = struct.pack("<H", len(name_bytes)) + name_bytes
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.connect(self._path)
-            body = self._request_response(
-                sock,
-                _MSG_TYPE_REQUEST_CLASS_METHODS,
-                req_body,
-                _MSG_TYPE_RESPONSE_CLASS_METHODS,
-            )
-        return self._parse_string_list(body)
+
+        body = pstring.pack(class_name)
+        resp = self._send_request(
+            _MSG_TYPE_REQUEST_CLASS_METHODS,
+            body
+        )
+
+        if resp.message_type != _MSG_TYPE_RESPONSE_CLASS_METHODS:
+            raise ValueError("Unexpected response")
+
+        return self._parse_string_list(resp.raw_body)
 
 
 def compute_stat_summary(
@@ -262,10 +294,12 @@ def compute_stat_summary(
     that fall within [start_time, end_time].
     """
     entry = None
+
     for e in stats:
         if e["class_name"] == class_name and e["method_sig"] == method_sig:
             entry = e
             break
+
     if entry is None:
         raise ValueError(
             f"method not found in stats: {class_name} / {method_sig}"
@@ -275,6 +309,7 @@ def compute_stat_summary(
         s for s in entry["snapshots"]
         if start_time <= s["timestamp"] <= end_time
     ]
+
     if len(snaps) < 2:
         raise ValueError(
             f"need at least 2 snapshots in [{start_time}, {end_time}], "
