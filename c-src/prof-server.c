@@ -26,6 +26,7 @@
 #include "prof-server-ev.h"
 #include "uif-response.h"
 #include "class-info.h"
+#include "class-info-list.h"
 #include "bytecode.h"
 #include "jni/jni-profiler.h"
 #include "jni/jni-system.h"
@@ -43,8 +44,6 @@
 
 #define LOG_TAG "prof-server"
 
-#define PS_CLASSES_INITIAL_CAP 16
-
 struct pending_instrument {
 	volatile const char *class_name;
 	volatile const char *method_sig;
@@ -61,47 +60,11 @@ struct prof_server {
 	pthread_mutex_t resume_mutex;
 	pthread_cond_t resume_cond;
 	int paused;
-	size_t num_loaded_classes;
-	size_t classes_capacity;
-	struct class_info **loaded_classes;
+	struct class_info_list loaded_classes;
 	int thread_running;
 	struct pending_instrument pending;
 };
 
-static int add_class(struct prof_server *ps, struct class_info *ci)
-{
-	if (ps->num_loaded_classes == ps->classes_capacity) {
-		size_t new_cap = ps->classes_capacity * 2;
-		struct class_info **arr = realloc(
-			ps->loaded_classes,
-			new_cap * sizeof(*arr)
-		);
-		if (arr == NULL) {
-			return -1;
-		}
-		ps->loaded_classes = arr;
-		ps->classes_capacity = new_cap;
-	}
-
-	ps->loaded_classes[ps->num_loaded_classes] = ci;
-	ps->num_loaded_classes += 1;
-
-	return 0;
-}
-
-static struct class_info *find_class_by_name(
-	const struct prof_server *ps,
-	const char *name
-) {
-	size_t i;
-
-	for (i = 0; i < ps->num_loaded_classes; i++) {
-		if (strcmp(ps->loaded_classes[i]->name, name) == 0) {
-			return ps->loaded_classes[i];
-		}
-	}
-	return NULL;
-}
 
 static void handle_class_loaded(
 	struct prof_server *ps,
@@ -123,7 +86,7 @@ static void handle_class_loaded(
 	ci = ci_alloc(name, bytecode, bytecode_len, &methods);
 	if (ci == NULL) {
 		method_list_deep_destroy(&methods);
-	} else if (add_class(ps, ci) != 0) {
+	} else if (ci_list_add(&ps->loaded_classes, ci) != 0) {
 		ci_free(ci);
 	}
 
@@ -140,7 +103,7 @@ static void handle_usr_rq_loaded_classes(
 
 	uif_respond_loaded_classes(
 		ps->uif, client,
-		ps->loaded_classes, ps->num_loaded_classes
+		ps->loaded_classes.arr, ps->loaded_classes.len
 	);
 	uif_client_release(client);
 }
@@ -150,7 +113,7 @@ static void handle_usr_rq_class_methods(
 	struct ps_msg *msg
 ) {
 	const char *class_name = msg->body.usr_rq_class_methods.class_name;
-	struct class_info *ci = find_class_by_name(ps, class_name);
+	struct class_info *ci = ci_list_find_by_name(&ps->loaded_classes, class_name);
 
 	uif_respond_class_methods(
 		ps->uif, msg->body.usr_rq_class_methods.client, ci
@@ -245,7 +208,7 @@ static void handle_usr_rq_instrument_method(
 		goto respond;
 	}
 
-	ci = find_class_by_name(ps, class_name);
+	ci = ci_list_find_by_name(&ps->loaded_classes, class_name);
 	if (ci == NULL) {
 		LOG_WARN("instrument: class not found: %s", class_name);
 		goto fail_cleanup_profiler;
@@ -360,7 +323,7 @@ static void handle_usr_rq_deinstrument_method(
 	struct user_if_client *client =
 		msg->body.usr_rq_deinstrument_method.client;
 
-	struct class_info *ci = find_class_by_name(ps, class_name);
+	struct class_info *ci = ci_list_find_by_name(&ps->loaded_classes, class_name);
 	unsigned char *new_bc = NULL;
 	size_t new_bc_len;
 	enum deinstrument_resp_status resp_status = DEINSTRUMENT_RP_OK;
@@ -558,13 +521,9 @@ struct prof_server *ps_init(void)
 	ps->jvmti = NULL;
 	ps->thread_running = 0;
 	ps->pending = (struct pending_instrument){0};
-	ps->num_loaded_classes = 0;
-	ps->classes_capacity = PS_CLASSES_INITIAL_CAP;
 	ps->paused = prof_pause_on_start();
-	ps->loaded_classes = malloc(
-		PS_CLASSES_INITIAL_CAP * sizeof(*ps->loaded_classes)
-	);
-	if (ps->loaded_classes == NULL) {
+
+	if (ci_list_init(&ps->loaded_classes, 0) != 0) {
 		goto fail;
 	}
 
@@ -604,7 +563,7 @@ fail_mutex:
 fail_sem:
 	sem_destroy(&ps->shutdown_sem);
 fail_classes:
-	free(ps->loaded_classes);
+	ci_list_deep_destroy(&ps->loaded_classes);
 fail:
 	free(ps);
 	return NULL;
@@ -660,8 +619,6 @@ void ps_wait_for_resume(struct prof_server *ps)
 
 void ps_destroy(struct prof_server *ps)
 {
-	size_t i;
-
 	if (ps->thread_running) {
 		struct ps_msg *sd = malloc(sizeof(*sd));
 		if (sd != NULL) {
@@ -675,10 +632,7 @@ void ps_destroy(struct prof_server *ps)
 
 	uif_destroy(ps->uif);
 
-	for (i = 0; i < ps->num_loaded_classes; i++) {
-		ci_free(ps->loaded_classes[i]);
-	}
-	free(ps->loaded_classes);
+	ci_list_deep_destroy(&ps->loaded_classes);
 
 	pthread_cond_destroy(&ps->resume_cond);
 	pthread_mutex_destroy(&ps->resume_mutex);
