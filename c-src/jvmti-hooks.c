@@ -99,6 +99,7 @@ JNIEXPORT jint JNICALL Agent_OnLoad(JavaVM *vm, char *options, void *reserved)
 
 	caps.can_generate_all_class_hook_events = 1;
 	caps.can_retransform_classes = 1;
+	caps.can_suspend = 1;
 	(*jvmti)->AddCapabilities(jvmti, &caps);
 
 	jvmtiEventCallbacks cb;

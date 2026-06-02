@@ -38,10 +38,18 @@ _MSG_TYPE_RESPONSE_DEINSTRUMENT_METHOD = 9
 _MSG_TYPE_REQUEST_SHUTDOWN             = 10
 _MSG_TYPE_REQUEST_RESUME               = 11
 _MSG_TYPE_RESPONSE_RESUME              = 12
+_MSG_TYPE_REQUEST_PAUSE_THREADS        = 13
+_MSG_TYPE_RESPONSE_PAUSE_THREADS       = 14
 
 _RESUME_STATUS_UNBLOCKED = 0
 _RESUME_STATUS_NOCHANGE  = 1
 _RESUME_STATUS_ERROR     = 2
+
+_PAUSE_THREADS_STATUS_OK             = 0
+_PAUSE_THREADS_STATUS_ALREADY_PAUSED = 1
+_PAUSE_THREADS_STATUS_ERROR          = 2
+_PAUSE_THREADS_STATUS_RACE_FAILURE   = 3
+
 
 _HDR_FMT  = "<II"
 _HDR_SIZE = struct.calcsize(_HDR_FMT)
@@ -310,6 +318,26 @@ class ProfClient:
             raise RuntimeError("resume failed with error status")
 
         return "unblocked" if status == _RESUME_STATUS_UNBLOCKED else "nochange"
+
+    def pause_threads(self) -> str:
+
+        resp = self._send_request(_MSG_TYPE_REQUEST_PAUSE_THREADS)
+
+        if resp.message_type != _MSG_TYPE_RESPONSE_PAUSE_THREADS:
+            raise ValueError("Unexpected response")
+
+        (status,) = struct.unpack("<I", resp.raw_body)
+
+        if status == _PAUSE_THREADS_STATUS_ERROR:
+            raise RuntimeError("pause_threads failed")
+
+        if status == _PAUSE_THREADS_STATUS_RACE_FAILURE:
+            raise RuntimeError(
+                "pause_threads failed: concurrent thread creation "
+                "prevented a stable pause"
+            )
+
+        return "paused" if status == _PAUSE_THREADS_STATUS_OK else "already_paused"
 
     def get_class_methods(self, class_name: str) -> list[str]:
 

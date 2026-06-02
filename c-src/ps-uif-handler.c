@@ -176,6 +176,8 @@ int ps_uif_handler(
 		return ps_send_shutdown_request(ps, 0, USR_SHUTDOWN_MSG);
 	case REQUEST_RESUME:
 		return ps_send_usr_rq_resume(ps, client);
+	case REQUEST_PAUSE_THREADS:
+		return ps_send_usr_rq_pause_threads(ps, client);
 	default:
 		return -1;
 	}

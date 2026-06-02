@@ -47,6 +47,8 @@ enum user_msg_type {
 	REQUEST_SHUTDOWN = 10,
 	REQUEST_RESUME = 11,
 	RESPONSE_RESUME = 12,
+	REQUEST_PAUSE_THREADS = 13,
+	RESPONSE_PAUSE_THREADS = 14,
 };
 
 enum instrument_resp_status {
@@ -66,6 +68,14 @@ enum resume_resp_status {
 	RESUME_RP_ERROR = 2,
 };
 
+enum pause_threads_resp_status {
+	PAUSE_THREADS_RP_OK = 0,
+	PAUSE_THREADS_RP_ALREADY_PAUSED = 1,
+	PAUSE_THREADS_RP_ERROR = 2,
+	PAUSE_THREADS_RP_RACE_FAILURE = 3,
+};
+
+
 struct user_msg_instr_resp {
 	uint32_t status;
 };
@@ -77,6 +87,11 @@ struct user_msg_deinstr_resp {
 struct user_msg_resume_resp {
 	uint32_t status;
 };
+
+struct user_msg_pause_threads_resp {
+	uint32_t status;
+};
+
 
 struct user_msg_class_list {
 	uint32_t len;
@@ -93,6 +108,7 @@ struct PACKED user_msg {
 		struct user_msg_instr_resp instr_rep;
 		struct user_msg_deinstr_resp deinstr_resp;
 		struct user_msg_resume_resp resume_resp;
+		struct user_msg_pause_threads_resp pause_threads_resp;
 	} body;
 };
 

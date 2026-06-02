@@ -87,4 +87,8 @@ int ps_send_shutdown_request(
 	struct prof_server *ps, int exit_code, const char *msg
 );
 
+int ps_send_usr_rq_pause_threads(
+	struct prof_server *ps, struct user_if_client *client
+);
+
 #endif /* _PROF_SERVER_EV_H */

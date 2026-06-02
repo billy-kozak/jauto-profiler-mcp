@@ -62,4 +62,10 @@ int uif_respond_resume(
 	enum resume_resp_status status
 );
 
+int uif_respond_pause_threads(
+	struct user_if *uif,
+	struct user_if_client *client,
+	enum pause_threads_resp_status status
+);
+
 #endif /* _UIF_RESPONSE_H */

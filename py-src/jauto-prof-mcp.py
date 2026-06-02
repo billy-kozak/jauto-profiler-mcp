@@ -186,13 +186,30 @@ def shutdown_jvm() -> None:
 
 
 @mcp.tool()
-def resume_application() -> str:
-    """Resume a JVM that was paused at startup by the profiler agent.
+def pause_threads() -> str:
+    """Pause all application threads in the attached JVM.
 
-    The agent pauses the JVM at VM initialization by default (before
-    main() runs), giving you a window to instrument methods before any
-    application code executes. This is essential for short-lived or
-    one-shot applications where the work you care about happens early.
+    Suspends every non-daemon application thread so the JVM stops making
+    progress. The profiler agent thread continues to run, so you can still
+    issue further commands (instrument methods, collect stats, resume).
+
+    Returns 'paused' if threads were suspended, or 'already_paused' if a
+    previous pause_threads call is still in effect. Raises on error.
+
+    Call resume_threads to let the application continue.
+    """
+    return ProfClient().pause_threads()
+
+
+@mcp.tool()
+def resume_application() -> str:
+    """Resume a paused JVM.
+
+    Handles two pause cases with a single command:
+      - Startup pause: the agent pauses the JVM at VM initialization by
+        default (before main() runs), giving you a window to instrument
+        methods before any application code executes.
+      - Runtime pause: a pause triggered by a previous pause_threads call.
 
     Returns 'unblocked' if the JVM was paused and is now running, or
     'nochange' if the JVM was already running. Raises on error.
@@ -204,8 +221,8 @@ def resume_application() -> str:
       4. Call resume_application to let main() proceed
       5. After the application exits, call get_profiler_stats
 
-    To disable the automatic pause, set JAUTO_PROF_PAUSE=0 in the
-    environment before launching the JVM.
+    To disable the automatic startup pause, set JAUTO_PROF_PAUSE=0 in
+    the environment before launching the JVM.
     """
     return ProfClient().resume()
 

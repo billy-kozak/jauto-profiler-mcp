@@ -83,6 +83,12 @@ def cmd_stat_summary(client, args):
 def cmd_resume(client, args):
     print(client.resume())
 
+
+def cmd_pause_threads(client, args):
+    print(client.pause_threads())
+
+
+
 ###############################################################################
 # entry point
 ###############################################################################
@@ -142,6 +148,9 @@ def main():
 
     sub.add_parser('resume', help='resume a JVM paused at startup')
 
+    sub.add_parser('pause-threads', help='suspend all application threads')
+
+
     args = parser.parse_args()
 
     client = ProfClient(args.socket)
@@ -155,6 +164,7 @@ def main():
         'stat-summary':       ClientCmd(client, cmd_stat_summary),
         'shutdown':           ClientCmd(client, cmd_shutdown),
         'resume':             ClientCmd(client, cmd_resume),
+        'pause-threads':      ClientCmd(client, cmd_pause_threads),
     }
 
     try:

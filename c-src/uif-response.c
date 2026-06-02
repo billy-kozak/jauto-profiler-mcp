@@ -190,3 +190,16 @@ int uif_respond_resume(
 		uif, client, RESPONSE_RESUME, &body, sizeof(body)
 	);
 }
+
+int uif_respond_pause_threads(
+	struct user_if *uif,
+	struct user_if_client *client,
+	enum pause_threads_resp_status status
+) {
+	struct user_msg_pause_threads_resp body = {(uint32_t)status};
+
+	return uif_send_short_response(
+		uif, client, RESPONSE_PAUSE_THREADS, &body, sizeof(body)
+	);
+}
+

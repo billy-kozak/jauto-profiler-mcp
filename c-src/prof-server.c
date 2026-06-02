@@ -31,6 +31,7 @@
 #include "jni/jni-profiler.h"
 #include "jni/jni-system.h"
 #include "jni/bc-instrument.h"
+#include "ps-thread-state.h"
 #include "util/log.h"
 
 #include <jvmti.h>
@@ -63,6 +64,8 @@ struct prof_server {
 	struct class_info_list loaded_classes;
 	int thread_running;
 	struct pending_instrument pending;
+	jthread agent_thread;
+	struct ps_thread_pause *thread_pause;
 };
 
 
@@ -378,6 +381,35 @@ respond:
 	ps_usr_rq_deinstrument_method_dealloc(msg);
 }
 
+static void handle_usr_rq_pause_threads(
+	struct prof_server *ps,
+	JNIEnv *jni_env,
+	struct ps_msg *msg
+) {
+	struct user_if_client *client = msg->body.usr_rq_pause_threads.client;
+	enum pause_threads_resp_status status;
+
+	free(msg);
+
+	switch (ps_thread_pause_suspend(
+		ps->thread_pause, ps->jvmti, jni_env, ps->agent_thread
+	)) {
+	case PS_SUSPEND_OK:
+		status = PAUSE_THREADS_RP_OK;
+		break;
+	case PS_SUSPEND_RACE:
+		status = PAUSE_THREADS_RP_RACE_FAILURE;
+		break;
+	default:
+		status = PAUSE_THREADS_RP_ERROR;
+		break;
+	}
+
+	uif_respond_pause_threads(ps->uif, client, status);
+	uif_client_release(client);
+}
+
+
 static void handle_shutdown_request(JNIEnv *jni_env, struct ps_msg *msg)
 {
 	int exit_code = msg->body.shutdown_request.exit_code;
@@ -453,6 +485,9 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 	case USR_RQ_RESUME:
 		handle_usr_rq_resume(ps, msg);
 		break;
+	case USR_RQ_PAUSE_THREADS:
+		handle_usr_rq_pause_threads(ps, jni_env, msg);
+		break;
 	case PS_SHUTDOWN:
 		free(msg);
 		ret = 0;
@@ -472,9 +507,8 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 static void JNICALL event_loop(jvmtiEnv *jvmti_env, JNIEnv *jni_env, void *arg)
 {
 	struct prof_server *ps = arg;
+	jthread cur_thread = NULL;
 	void *msg;
-
-	(void)jvmti_env;
 
 	if (jni_profiler_init_refs(jni_env) != 0) {
 		LOG_ERROR("jni_profiler_init_refs failed");
@@ -488,11 +522,21 @@ static void JNICALL event_loop(jvmtiEnv *jvmti_env, JNIEnv *jni_env, void *arg)
 		return;
 	}
 
+	if ((*jvmti_env)->GetCurrentThread(jvmti_env, &cur_thread) == JVMTI_ERROR_NONE) {
+		ps->agent_thread = (*jni_env)->NewGlobalRef(jni_env, cur_thread);
+	}
+	LOG_INFO("startup: agent_thread=%p", (void *)ps->agent_thread);
+
 	for (;;) {
 		evq_wait(ps->ev_q, &msg);
 		if (!dispatch(ps, jni_env, msg)) {
 			break;
 		}
+	}
+
+	if (ps->agent_thread != NULL) {
+		(*jni_env)->DeleteGlobalRef(jni_env, ps->agent_thread);
+		ps->agent_thread = NULL;
 	}
 
 	sem_post(&ps->shutdown_sem);
@@ -510,6 +554,7 @@ struct prof_server *ps_init(void)
 	ps->jvmti = NULL;
 	ps->thread_running = 0;
 	ps->pending = (struct pending_instrument){0};
+	ps->agent_thread = NULL;
 	ps->paused = prof_pause_on_start();
 
 	if (ci_list_init(&ps->loaded_classes, 0) != 0) {
@@ -539,10 +584,17 @@ struct prof_server *ps_init(void)
 		goto fail_queue;
 	}
 
+	ps->thread_pause = ps_thread_pause_alloc();
+	if (ps->thread_pause == NULL) {
+		goto fail_uif;
+	}
+
 	uif_register_handler(ps->uif, ps_uif_handler, ps);
 
 	return ps;
 
+fail_uif:
+	uif_destroy(ps->uif);
 fail_queue:
 	evq_destroy(ps->ev_q);
 fail_cond:
@@ -620,6 +672,7 @@ void ps_destroy(struct prof_server *ps)
 	}
 
 	uif_destroy(ps->uif);
+	ps_thread_pause_free(ps->thread_pause);
 
 	ci_list_deep_destroy(&ps->loaded_classes);
 
