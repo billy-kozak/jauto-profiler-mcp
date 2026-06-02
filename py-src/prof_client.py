@@ -89,17 +89,44 @@ class pstring:
 class ProfClient:
 
     def __init__(self, path: str | None = None):
-
         if path is None:
             path = os.environ.get(SOCKET_ENV_VAR, DEFAULT_SOCKET_PATH)
         self._path = path
+        self._sock = None
+        try:
+            self._connect()
+        except OSError:
+            pass
 
-    def _recv_msg(self, sock: socket.socket) -> bytes:
+    def __del__(self):
+        if self._sock is not None:
+            try:
+                self._sock.close()
+            except OSError:
+                pass
 
+    def _connect(self):
+        if self._sock is not None:
+            try:
+                self._sock.close()
+            except OSError:
+                pass
+            self._sock = None
+
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+        try:
+            sock.connect(self._path)
+        except OSError:
+            sock.close()
+            raise
+        self._sock = sock
+
+    def _recv_msg(self) -> RawMsg:
         hdr = bytearray()
 
         while len(hdr) < _HDR_SIZE:
-            chunk = sock.recv(_HDR_SIZE - len(hdr))
+            chunk = self._sock.recv(_HDR_SIZE - len(hdr))
             if not chunk:
                 raise ConnectionError("connection closed before full message received")
             hdr.extend(chunk)
@@ -108,7 +135,7 @@ class ProfClient:
         body = bytearray()
 
         while len(body) < body_size:
-            chunk = sock.recv(body_size - len(body))
+            chunk = self._sock.recv(body_size - len(body))
             if not chunk:
                 raise ConnectionError("connection closed before full message received")
             body.extend(chunk)
@@ -138,12 +165,26 @@ class ProfClient:
 
         hdr = struct.pack(_HDR_FMT, req_type, len(body))
 
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.connect(self._path)
-            sock.sendall(hdr + body)
-            msg = self._recv_msg(sock)
+        if self._sock is None:
+            try:
+                self._connect()
+            except OSError as e:
+                raise ConnectionError(
+                    f"cannot connect to profiler at {self._path}: {e}"
+                ) from e
 
-        return msg
+        try:
+            self._sock.sendall(hdr + body)
+            return self._recv_msg()
+        except (OSError, ConnectionError):
+            try:
+                self._connect()
+            except OSError as e:
+                raise ConnectionError(
+                    f"cannot connect to profiler at {self._path}: {e}"
+                ) from e
+            self._sock.sendall(hdr + body)
+            return self._recv_msg()
 
     def _parse_stats(self, body: bytes) -> list[dict]:
         if len(body) < 4:
@@ -245,10 +286,14 @@ class ProfClient:
             raise RuntimeError("deinstrument_method failed")
 
     def shutdown(self) -> None:
-
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.connect(self._path)
-            sock.sendall(struct.pack(_HDR_FMT, _MSG_TYPE_REQUEST_SHUTDOWN, 0))
+        if self._sock is None:
+            try:
+                self._connect()
+            except OSError as e:
+                raise ConnectionError(
+                    f"cannot connect to profiler at {self._path}: {e}"
+                ) from e
+        self._sock.sendall(struct.pack(_HDR_FMT, _MSG_TYPE_REQUEST_SHUTDOWN, 0))
 
     def resume(self) -> str:
 
