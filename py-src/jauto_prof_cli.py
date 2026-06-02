@@ -159,8 +159,11 @@ def main():
 
     try:
         commands[args.command](args)
-    except (RuntimeError, ConnectionError, ValueError) as e:
+    except (RuntimeError, ConnectionError, ValueError, OSError) as e:
         print(f'error: {e}', file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f'error: unexpected error ({type(e).__name__}): {e}', file=sys.stderr)
         sys.exit(1)
 
 
