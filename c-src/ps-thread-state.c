@@ -373,3 +373,29 @@ enum ps_suspend_result ps_thread_pause_suspend(
 	LOG_WARN("pause: gave up after %d iterations", MAX_SUSPEND_ITERATIONS);
 	return PS_SUSPEND_RACE;
 }
+
+int ps_thread_pause_resume(
+	struct ps_thread_pause *state,
+	jvmtiEnv *jvmti,
+	JNIEnv *jni_env
+) {
+	if (state->suspended_count == 0) {
+		return 0;
+	}
+
+	for (int i = 0; i < state->suspended_count; i++) {
+		jvmtiError err = (*jvmti)->ResumeThread(
+			jvmti, state->suspended_threads[i]
+		);
+		if (err != JVMTI_ERROR_NONE &&
+			err != JVMTI_ERROR_THREAD_NOT_ALIVE) {
+			LOG_WARN(
+				"ResumeThread: thread[%d] error=%d",
+				i, (int)err
+			);
+		}
+		(*jni_env)->DeleteGlobalRef(jni_env, state->suspended_threads[i]);
+	}
+	state->suspended_count = 0;
+	return 0;
+}

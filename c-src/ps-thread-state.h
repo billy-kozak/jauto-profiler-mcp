@@ -49,4 +49,10 @@ enum ps_suspend_result ps_thread_pause_suspend(
 	jthread agent_thread
 );
 
+int ps_thread_pause_resume(
+	struct ps_thread_pause *state,
+	jvmtiEnv *jvmti,
+	JNIEnv *jni_env
+);
+
 #endif /* _PS_THREAD_STATE_H */

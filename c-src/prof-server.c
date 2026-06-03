@@ -446,6 +446,7 @@ static int resume_vm(struct prof_server *ps)
 
 static void handle_usr_rq_resume(
 	struct prof_server *ps,
+	JNIEnv *jni_env,
 	struct ps_msg *msg
 ) {
 	struct user_if_client *client = msg->body.usr_rq_resume.client;
@@ -453,7 +454,20 @@ static void handle_usr_rq_resume(
 
 	free(msg);
 
-	status = resume_vm(ps) ? RESUME_RP_UNBLOCKED : RESUME_RP_NOCHANGE;
+	if (resume_vm(ps)) {
+		status = RESUME_RP_UNBLOCKED;
+	} else if (ps->thread_pause->suspended_count > 0) {
+		if (ps_thread_pause_resume(
+			ps->thread_pause, ps->jvmti, jni_env
+		) == 0) {
+			status = RESUME_RP_UNBLOCKED;
+		} else {
+			status = RESUME_RP_ERROR;
+		}
+	} else {
+		status = RESUME_RP_NOCHANGE;
+	}
+
 	uif_respond_resume(ps->uif, client, status);
 	uif_client_release(client);
 }
@@ -483,7 +497,7 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 		handle_usr_rq_deinstrument_method(ps, jni_env, msg);
 		break;
 	case USR_RQ_RESUME:
-		handle_usr_rq_resume(ps, msg);
+		handle_usr_rq_resume(ps, jni_env, msg);
 		break;
 	case USR_RQ_PAUSE_THREADS:
 		handle_usr_rq_pause_threads(ps, jni_env, msg);
