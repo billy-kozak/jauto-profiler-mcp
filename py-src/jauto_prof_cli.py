@@ -95,6 +95,13 @@ def cmd_list_instrumented(client, args):
         )
 
 
+def cmd_get_async_errors(client, args):
+    import datetime
+    for entry in client.get_async_errors():
+        ts = datetime.datetime.fromtimestamp(entry['timestamp'])
+        print(f"{ts}\t{entry['message']}")
+
+
 
 ###############################################################################
 # entry point
@@ -162,6 +169,11 @@ def main():
         help='list all instrumented and deferred methods'
     )
 
+    sub.add_parser(
+        'get-async-errors',
+        help='show errors from the asynchronous error log'
+    )
+
     args = parser.parse_args()
 
     client = ProfClient(args.socket)
@@ -177,6 +189,7 @@ def main():
         'resume':             ClientCmd(client, cmd_resume),
         'pause-threads':      ClientCmd(client, cmd_pause_threads),
         'list-instrumented':  ClientCmd(client, cmd_list_instrumented),
+        'get-async-errors':   ClientCmd(client, cmd_get_async_errors),
     }
 
     try:

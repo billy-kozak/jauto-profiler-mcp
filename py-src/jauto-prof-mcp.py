@@ -87,6 +87,26 @@ def instrument_method(class_name: str, method_sig: str) -> str:
 
 
 @mcp.tool()
+def get_async_errors() -> list[dict]:
+    """Return all errors from the profiler's asynchronous error log.
+
+    The log captures errors that could not be reported synchronously —
+    currently, failures that occur when a deferred instrumentation is
+    attempted on class load (e.g. the requested method does not exist
+    in the class that loaded).
+
+    Each entry is a dict with:
+      timestamp  - Unix timestamp (seconds) when the error was recorded
+      message    - human-readable error description
+
+    Entries are returned in chronological order (oldest first). The log
+    holds up to 4096 entries; oldest entries are silently evicted when
+    the buffer is full. Reads are non-destructive.
+    """
+    return ProfClient().get_async_errors()
+
+
+@mcp.tool()
 def get_instrumented_methods() -> list[dict]:
     """Return all currently instrumented and deferred methods.
 

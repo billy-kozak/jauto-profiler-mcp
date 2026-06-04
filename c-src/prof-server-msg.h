@@ -34,6 +34,7 @@ enum ps_msg_type {
 	PS_SHUTDOWN_REQUEST,
 	USR_RQ_PAUSE_THREADS,
 	USR_RQ_LIST_INSTRUMENTED,
+	USR_RQ_GET_ASYNC_ERRORS,
 };
 
 #define PSM_SHUTDOWN_REQUEST_MSG_MAX 256
@@ -86,6 +87,10 @@ struct psm_usr_rq_list_instrumented {
 	struct user_if_client *client;
 };
 
+struct psm_usr_rq_get_async_errors {
+	struct user_if_client *client;
+};
+
 struct ps_msg {
 	enum ps_msg_type type;
 	union {
@@ -99,6 +104,7 @@ struct ps_msg {
 		struct psm_usr_rq_resume usr_rq_resume;
 		struct psm_usr_rq_pause_threads usr_rq_pause_threads;
 		struct psm_usr_rq_list_instrumented usr_rq_list_instrumented;
+		struct psm_usr_rq_get_async_errors usr_rq_get_async_errors;
 	} body;
 };
 

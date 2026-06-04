@@ -42,6 +42,8 @@ _MSG_TYPE_REQUEST_PAUSE_THREADS        = 13
 _MSG_TYPE_RESPONSE_PAUSE_THREADS       = 14
 _MSG_TYPE_REQUEST_LIST_INSTRUMENTED    = 15
 _MSG_TYPE_RESPONSE_LIST_INSTRUMENTED   = 16
+_MSG_TYPE_REQUEST_GET_ASYNC_ERRORS     = 17
+_MSG_TYPE_RESPONSE_GET_ASYNC_ERRORS    = 18
 
 _LISTED_INSTR_ACTIVE   = 0
 _LISTED_INSTR_DEFERRED = 1
@@ -383,6 +385,37 @@ class ProfClient:
                     "deferred" if status == _LISTED_INSTR_DEFERRED
                     else "active"
                 ),
+            })
+
+        return result
+
+    def get_async_errors(self) -> list[dict]:
+
+        resp = self._send_request(_MSG_TYPE_REQUEST_GET_ASYNC_ERRORS)
+
+        if resp.message_type != _MSG_TYPE_RESPONSE_GET_ASYNC_ERRORS:
+            raise ValueError("Unexpected response")
+
+        body = resp.raw_body
+        if len(body) < 4:
+            raise ValueError("response body too short")
+
+        (count,) = struct.unpack_from("<I", body, 0)
+        offset = 4
+        result = []
+
+        for _ in range(count):
+            if offset + 8 > len(body):
+                raise ValueError("truncated timestamp")
+            (timestamp,) = struct.unpack_from("<q", body, offset)
+            offset += 8
+
+            msg_ps = pstring(body, offset)
+            offset += msg_ps.size
+
+            result.append({
+                "timestamp": timestamp,
+                "message": msg_ps.value,
             })
 
         return result

@@ -51,6 +51,8 @@ enum user_msg_type {
 	RESPONSE_PAUSE_THREADS = 14,
 	REQUEST_LIST_INSTRUMENTED = 15,
 	RESPONSE_LIST_INSTRUMENTED = 16,
+	REQUEST_GET_ASYNC_ERRORS = 17,
+	RESPONSE_GET_ASYNC_ERRORS = 18,
 };
 
 enum instrument_resp_status {
@@ -117,6 +119,16 @@ struct user_msg_class_list {
 	struct pstring classes[];
 };
 
+struct user_msg_err_list {
+	int64_t timestamp;
+	struct pstring msg;
+};
+
+struct PACKED user_msg_err_resp {
+	uint32_t len;
+	struct user_msg_err_list list[A_FLEX];
+};
+
 struct PACKED user_msg {
 	uint32_t type;
 	uint32_t size;
@@ -128,6 +140,7 @@ struct PACKED user_msg {
 		struct user_msg_deinstr_resp deinstr_resp;
 		struct user_msg_resume_resp resume_resp;
 		struct user_msg_pause_threads_resp pause_threads_resp;
+		struct user_msg_err_resp err_list_resp;
 	} body;
 };
 

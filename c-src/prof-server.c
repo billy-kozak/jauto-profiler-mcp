@@ -33,6 +33,7 @@
 #include "jni/bc-instrument.h"
 #include "ps-thread-state.h"
 #include "queued-instrument.h"
+#include "prof-err-log.h"
 #include "util/log.h"
 
 #include <jvmti.h>
@@ -68,6 +69,7 @@ struct prof_server {
 	struct pending_instrument pending;
 	jthread agent_thread;
 	struct ps_thread_pause *thread_pause;
+	struct prof_err_log err_log;
 };
 
 
@@ -263,6 +265,11 @@ static void do_deferred_instrumentations(
 				"deferred instrumentation failed for %s %s",
 				(char *)ci->name->str, method_sig
 			);
+			prof_err_log_printf(
+				&ps->err_log,
+				"deferred instrumentation failed: %s %s",
+				(char *)ci->name->str, method_sig
+			);
 		}
 		queued_instrument_list_remove_and_destroy(
 			&ps->queued_instruments, idx
@@ -448,6 +455,19 @@ respond:
 	ps_usr_rq_deinstrument_method_dealloc(msg);
 }
 
+static void handle_usr_rq_get_async_errors(
+	struct prof_server *ps,
+	struct ps_msg *msg
+) {
+	struct user_if_client *client =
+		msg->body.usr_rq_get_async_errors.client;
+
+	free(msg);
+
+	uif_respond_get_async_errors(ps->uif, client, &ps->err_log);
+	uif_client_release(client);
+}
+
 static void handle_usr_rq_list_instrumented(
 	struct prof_server *ps,
 	struct ps_msg *msg
@@ -588,6 +608,9 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 	case USR_RQ_LIST_INSTRUMENTED:
 		handle_usr_rq_list_instrumented(ps, msg);
 		break;
+	case USR_RQ_GET_ASYNC_ERRORS:
+		handle_usr_rq_get_async_errors(ps, msg);
+		break;
 	case PS_SHUTDOWN:
 		free(msg);
 		ret = 0;
@@ -656,6 +679,7 @@ struct prof_server *ps_init(void)
 	ps->pending = (struct pending_instrument){0};
 	ps->agent_thread = NULL;
 	ps->paused = prof_pause_on_start();
+	prof_err_log_init(&ps->err_log);
 
 	if (ci_list_init(&ps->loaded_classes, 0) != 0) {
 		goto fail;
@@ -782,6 +806,7 @@ void ps_destroy(struct prof_server *ps)
 
 	ci_list_deep_destroy(&ps->loaded_classes);
 	queued_instrument_list_deep_destroy(&ps->queued_instruments);
+	prof_err_log_destroy(&ps->err_log);
 
 	pthread_cond_destroy(&ps->resume_cond);
 	pthread_mutex_destroy(&ps->resume_mutex);

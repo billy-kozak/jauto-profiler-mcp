@@ -180,6 +180,8 @@ int ps_uif_handler(
 		return ps_send_usr_rq_pause_threads(ps, client);
 	case REQUEST_LIST_INSTRUMENTED:
 		return ps_send_usr_rq_list_instrumented(ps, client);
+	case REQUEST_GET_ASYNC_ERRORS:
+		return ps_send_usr_rq_get_async_errors(ps, client);
 	default:
 		return -1;
 	}

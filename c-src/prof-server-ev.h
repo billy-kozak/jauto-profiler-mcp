@@ -95,4 +95,8 @@ int ps_send_usr_rq_list_instrumented(
 	struct prof_server *ps, struct user_if_client *client
 );
 
+int ps_send_usr_rq_get_async_errors(
+	struct prof_server *ps, struct user_if_client *client
+);
+
 #endif /* _PROF_SERVER_EV_H */

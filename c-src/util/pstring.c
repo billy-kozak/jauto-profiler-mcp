@@ -18,8 +18,12 @@
 
 #include "pstring.h"
 
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+
+#define PSTRING_SPRINTF_INIT_CAP 512
 
 struct pstring *pstring_from_cstr(const char *str) {
 	size_t str_len = strlen(str);
@@ -38,6 +42,65 @@ struct pstring *pstring_from_cstr(const char *str) {
 
 	ps->size = str_len;
 	memcpy(ps->str, str, str_len + 1);
+
+	return ps;
+}
+
+struct pstring *pstring_vsprintf(const char *fmt, va_list args)
+{
+	struct pstring *ps;
+	va_list args_copy;
+	int written;
+
+	ps = malloc(sizeof(*ps) + PSTRING_SPRINTF_INIT_CAP);
+	if (ps == NULL) {
+		return NULL;
+	}
+
+	va_copy(args_copy, args);
+	written = vsnprintf(
+		(char *)ps->str, PSTRING_SPRINTF_INIT_CAP, fmt, args_copy
+	);
+	va_end(args_copy);
+
+	if (written < 0) {
+		free(ps);
+		return NULL;
+	}
+
+	size_t written_size = (size_t)written;
+
+	if (written_size >= PSTRING_SPRINTF_INIT_CAP) {
+		size_t needed = written_size <= PSTR_MAX ?
+			written_size : PSTR_MAX;
+
+		struct pstring *new_ps = realloc(ps, sizeof(*ps) + needed + 1);
+		if (new_ps == NULL) {
+			free(ps);
+			return NULL;
+		}
+		ps = new_ps;
+
+		va_copy(args_copy, args);
+		vsnprintf((char *)ps->str, needed + 1, fmt, args_copy);
+		va_end(args_copy);
+
+		ps->size = needed;
+	} else {
+		ps->size = (uint16_t)written_size;
+	}
+
+	return ps;
+}
+
+struct pstring *pstring_sprintf(const char *fmt, ...)
+{
+	va_list args;
+	struct pstring *ps;
+
+	va_start(args, fmt);
+	ps = pstring_vsprintf(fmt, args);
+	va_end(args);
 
 	return ps;
 }

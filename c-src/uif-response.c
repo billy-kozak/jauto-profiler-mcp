@@ -273,3 +273,43 @@ int uif_respond_list_instrumented(
 	return 0;
 }
 
+int uif_respond_get_async_errors(
+	struct user_if *uif,
+	struct user_if_client *client,
+	const struct prof_err_log *log
+) {
+	struct user_msg *response;
+	uint8_t *p;
+	uint32_t body_size = 0;
+	struct prof_err_log_size elog_size;
+	struct prof_err_log_itr itr = PROF_ERR_LOG_ITR_INIT;
+	struct user_msg_err_resp *body = NULL;
+
+	elog_size = prof_err_log_size(log);
+	body_size += sizeof(body->len);
+	body_size += elog_size.overhead_size;
+
+	response = malloc(offsetof(struct user_msg, body) + body_size);
+	if (response == NULL) {
+		return -1;
+	}
+
+	body = &(response->body.err_list_resp);
+	body->len = elog_size.count;
+
+	response->type = RESPONSE_GET_ASYNC_ERRORS;
+	response->size = body_size;
+
+	p = (uint8_t*)(body->list);
+
+	const struct prof_err_entry *e;
+	while((e = prof_err_log_iterate(&itr, log)) != NULL){
+		memcpy(p, &e->timestamp, sizeof(e->timestamp));
+		p += sizeof(e->timestamp);
+		p = pstring_memcpy_to(p, e->msg);
+	}
+
+	uif_send(uif, client, response);
+	free(response);
+	return 0;
+}
