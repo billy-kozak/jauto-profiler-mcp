@@ -47,28 +47,8 @@ entry point (jauto-prof-mcp) will now be found in the bin directory.
 # Logging
 
 The profiler server logs to /tmp/jauto-prof.log by default. Use the environment variable `$JAUTO_PROF_LOG` to change
-the output location (set to empty string to log to stderr). Use JAUTO_PROF_LOG_LEVEL to set logging level to one of
+the output location (set to empty string to log to stderr). Use `$JAUTO_PROF_LOG_LEVEL` to set logging level to one of
 OFF, ERROR, WARN, INFO, DEBUG.
-
-# Architecture
-
-This program runs in two pieces: the MCP server and the profiler server.
-
-The profiler server starts as a JVMTI agent. JVMTI agents are native libraries which are attached to a target JVM
-by passing an argument to the Java program (see Using the Profiler).
-
-The profiler server opens a Unix domain socket which it uses to communicate with the MCP server using a
-request/response driven messaging system. The profiler server makes use of a Java library which contains the Profiler
-instrumentation code and byte-code transformation logic.
-
-Profiler instrumentation is a process of transforming the byte-code of a targeted class in order to insert calls
-to the Profiler at each entry and exit point of a target method (including exception propagation). The code which
-runs at each entry and exit point is written in Java and passed in as a Jar (`jauto-prof-lib.jar`) to the target's
-class-path so that the profiler server can load it.
-
-Beacuse byte-code transformation is non-trivial and the most popular byte-code transformation library is written in
-Java, the profiler-server uses JNI to call a Java function which performs the byte-code transformation using the "ASM"
-library. This transformation function is also contained within the `jauto-prof-lib.jar`.
 
 # Dependencies
 
@@ -79,3 +59,6 @@ Other dependencies are downloaded automatically by the build and setup scripts, 
 - FastMCP (python library).
 - ASM (Java library).
 
+# Developing
+
+See docs/DEVELOPMENT.md.
