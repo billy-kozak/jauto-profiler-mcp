@@ -49,7 +49,7 @@ def cmd_get_methods(client, args):
 
 
 def cmd_instrument_method(client, args):
-    client.instrument_method(args.class_name, args.method_sig)
+    print(client.instrument_method(args.class_name, args.method_sig))
 
 
 def cmd_deinstrument_method(client, args):

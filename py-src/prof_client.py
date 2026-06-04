@@ -256,7 +256,7 @@ class ProfClient:
 
         return self._parse_string_list(resp.raw_body)
 
-    def instrument_method(self, class_name: str, method_sig: str) -> None:
+    def instrument_method(self, class_name: str, method_sig: str) -> str:
 
         body = pstring.pack(class_name) + pstring.pack(method_sig)
 
@@ -273,8 +273,13 @@ class ProfClient:
         if status == 1:
             raise RuntimeError("method is already instrumented")
 
+        if status == 3:
+            return "deferred"
+
         if status != 0:
             raise RuntimeError("instrument_method failed")
+
+        return "ok"
 
     def deinstrument_method(self, class_name: str, method_sig: str) -> None:
 

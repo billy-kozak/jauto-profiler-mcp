@@ -55,6 +55,7 @@ enum instrument_resp_status {
 	INSTRUMENT_RP_OK = 0,
 	INSTRUMENT_RP_DOUBLE_INSTRUMENT = 1,
 	INSTRUMENT_RP_ERROR = 2,
+	INSTRUMENT_RP_DEFERRED = 3,
 };
 
 enum deinstrument_resp_status {

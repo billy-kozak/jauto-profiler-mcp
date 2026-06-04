@@ -63,16 +63,17 @@ def get_class_methods(class_name: str) -> list[str]:
 
 
 @mcp.tool()
-def instrument_method(class_name: str, method_sig: str) -> None:
+def instrument_method(class_name: str, method_sig: str) -> str:
     """Instrument a method so that entry/exit times and call counts are recorded.
 
     class_name: JVM internal class name (e.g. "org/example/MyClass$Inner")
     method_sig: exact signature string from get_class_methods
                 in "name:descriptor" form (e.g. "doWork:(I)V")
 
-    The JVM retransforms the class bytecode immediately. Instrumentation
-    persists until deinstrument_method is called. Raises on failure,
-    including if the method is already instrumented.
+    Returns "ok" if instrumentation was applied immediately, or "deferred" if
+    the class is not yet loaded (instrumentation will be applied automatically
+    when the class loads). Raises on failure, including if the method is
+    already instrumented.
 
     IMPORTANT — call sequentially, not in parallel. Each call triggers a JVM
     retransformation; firing multiple calls simultaneously can cause failures
@@ -82,7 +83,7 @@ def instrument_method(class_name: str, method_sig: str) -> None:
     a tight inner-loop leaf) will disrupt JIT inlining and can cause 100-350x
     slowdown. Prefer to start with higher-level methods and zoom in gradually.
     """
-    ProfClient().instrument_method(class_name, method_sig)
+    return ProfClient().instrument_method(class_name, method_sig)
 
 
 @mcp.tool()

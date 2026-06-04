@@ -32,6 +32,7 @@
 #include "jni/jni-system.h"
 #include "jni/bc-instrument.h"
 #include "ps-thread-state.h"
+#include "queued-instrument.h"
 #include "util/log.h"
 
 #include <jvmti.h>
@@ -62,39 +63,13 @@ struct prof_server {
 	pthread_cond_t resume_cond;
 	int paused;
 	struct class_info_list loaded_classes;
+	struct queued_instrument_list queued_instruments;
 	int thread_running;
 	struct pending_instrument pending;
 	jthread agent_thread;
 	struct ps_thread_pause *thread_pause;
 };
 
-
-static void handle_class_loaded(
-	struct prof_server *ps,
-	struct ps_msg *msg
-) {
-	char *name = msg->body.class_loaded.name;
-	unsigned char *bytecode = msg->body.class_loaded.bytecode;
-	size_t bytecode_len = msg->body.class_loaded.bytecode_len;
-	struct method_list methods;
-	struct class_info *ci;
-
-	if (method_list_init(&methods, 0) != 0) {
-		ps_send_class_ev_dealloc(msg);
-		return;
-	}
-
-	bc_extract_methods(bytecode, bytecode_len, &methods);
-
-	ci = ci_alloc(name, bytecode, bytecode_len, &methods);
-	if (ci == NULL) {
-		method_list_deep_destroy(&methods);
-	} else if (ci_list_add(&ps->loaded_classes, ci) != 0) {
-		ci_free(ci);
-	}
-
-	ps_send_class_ev_dealloc(msg);
-}
 
 static void handle_usr_rq_loaded_classes(
 	struct prof_server *ps,
@@ -184,43 +159,52 @@ static int retransform_pending(
 	return ret;
 }
 
-static void handle_usr_rq_instrument_method(
+static enum instrument_resp_status instrument_later(
+	struct prof_server *ps,
+	const char *class_name,
+	const char *method_sig
+) {
+	struct queued_instrument *qi = queued_instrument_list_add_and_init(
+		&ps->queued_instruments, class_name, method_sig
+	);
+	bool alloc_ok = (
+		qi != NULL && qi->class_name != NULL && qi->method_sig != NULL
+	);
+	if (!alloc_ok) {
+		if (qi != NULL) {
+			queued_instrument_list_remove_and_destroy(
+				&ps->queued_instruments,
+				(int)(ps->queued_instruments.len - 1)
+			);
+		}
+		return INSTRUMENT_RP_ERROR;
+	}
+	return INSTRUMENT_RP_DEFERRED;
+}
+
+static enum instrument_resp_status instrument_now(
 	struct prof_server *ps,
 	JNIEnv *jni_env,
-	struct ps_msg *msg
+	struct class_info *ci,
+	const char *method_sig
 ) {
-	struct user_if_client *client = msg->body
-		.usr_rq_instrument_method.client;
-
-	const char *class_name = msg->body.usr_rq_instrument_method.class_name;
-	const char *method_sig = msg->body.usr_rq_instrument_method.method_sig;
-	enum instrument_resp_status resp_status = INSTRUMENT_RP_ERROR;
-	struct class_info *ci = NULL;
 	struct instrumented_method *im = NULL;
 	unsigned char *new_bc = NULL;
 	size_t new_bc_len;
+	enum instrument_resp_status status = INSTRUMENT_RP_ERROR;
 	int id;
 
-	id = jni_create_profiler(jni_env, class_name, method_sig);
+	id = jni_create_profiler(jni_env, ci->name, method_sig);
 	if (id == -1) {
-		resp_status = INSTRUMENT_RP_DOUBLE_INSTRUMENT;
-		goto respond;
+		return INSTRUMENT_RP_DOUBLE_INSTRUMENT;
 	}
 	if (id < 0) {
 		LOG_ERROR("jni_create_profiler failed");
-		goto respond;
-	}
-
-	ci = ci_list_find_by_name(&ps->loaded_classes, class_name);
-	if (ci == NULL) {
-		LOG_WARN("instrument: class not found: %s", class_name);
-		goto fail_cleanup_profiler;
+		return INSTRUMENT_RP_ERROR;
 	}
 
 	im = instrumented_method_list_add_and_init(
-		&ci->instrumented,
-		method_sig,
-		id
+		&ci->instrumented, method_sig, id
 	);
 	if (im == NULL || im->method_sig == NULL) {
 		if (im != NULL) {
@@ -234,14 +218,15 @@ static void handle_usr_rq_instrument_method(
 		goto fail_cleanup_instrumented;
 	}
 
-	if (retransform_pending(
-		ps, jni_env, class_name, method_sig, new_bc, new_bc_len, id
-	) != 0) {
+	int ret_retransform = retransform_pending(
+		ps, jni_env, ci->name, method_sig, new_bc, new_bc_len, id
+	);
+	if (ret_retransform != 0) {
 		goto fail_cleanup_instrumented;
 	}
 
-	resp_status = INSTRUMENT_RP_OK;
-	goto respond;
+	status = INSTRUMENT_RP_OK;
+	goto done;
 
 fail_cleanup_instrumented:
 	instrumented_method_list_remove_and_destroy(
@@ -249,9 +234,91 @@ fail_cleanup_instrumented:
 	);
 fail_cleanup_profiler:
 	jni_remove_profiler(jni_env, id);
-respond:
+done:
 	free(new_bc);
-	uif_respond_instrument(ps->uif, client, resp_status);
+	return status;
+}
+
+static void do_deferred_instrumentations(
+	struct prof_server *ps,
+	JNIEnv *jni_env,
+	struct class_info *ci
+) {
+
+	while (true) {
+		int idx = queued_instrument_list_find_by_class(
+			&ps->queued_instruments, ci->name
+		);
+		if(idx < 0) {
+			break;
+		}
+
+		const char *method_sig = ps->queued_instruments.arr[idx]
+			.method_sig;
+		enum instrument_resp_status status = instrument_now(
+			ps, jni_env, ci, method_sig
+		);
+		if (status != INSTRUMENT_RP_OK) {
+			LOG_WARN(
+				"deferred instrumentation failed for %s %s",
+				ci->name, method_sig
+			);
+		}
+		queued_instrument_list_remove_and_destroy(
+			&ps->queued_instruments, idx
+		);
+	}
+}
+
+static void handle_class_loaded(
+	struct prof_server *ps,
+	JNIEnv *jni_env,
+	struct ps_msg *msg
+) {
+	char *name = msg->body.class_loaded.name;
+	unsigned char *bytecode = msg->body.class_loaded.bytecode;
+	size_t bytecode_len = msg->body.class_loaded.bytecode_len;
+	struct method_list methods;
+	struct class_info *ci;
+
+	if (method_list_init(&methods, 0) != 0) {
+		ps_send_class_ev_dealloc(msg);
+		return;
+	}
+
+	bc_extract_methods(bytecode, bytecode_len, &methods);
+
+	ci = ci_alloc(name, bytecode, bytecode_len, &methods);
+	if (ci == NULL) {
+		method_list_deep_destroy(&methods);
+	} else if (ci_list_add(&ps->loaded_classes, ci) != 0) {
+		ci_free(ci);
+	} else {
+		do_deferred_instrumentations(ps, jni_env, ci);
+	}
+
+	ps_send_class_ev_dealloc(msg);
+}
+
+static void handle_usr_rq_instrument_method(
+	struct prof_server *ps,
+	JNIEnv *jni_env,
+	struct ps_msg *msg
+) {
+	struct user_if_client *client = msg->body.usr_rq_instrument_method.client;
+	const char *class_name = msg->body.usr_rq_instrument_method.class_name;
+	const char *method_sig = msg->body.usr_rq_instrument_method.method_sig;
+	struct class_info *ci;
+	enum instrument_resp_status status;
+
+	ci = ci_list_find_by_name(&ps->loaded_classes, class_name);
+	if (ci == NULL) {
+		status = instrument_later(ps, class_name, method_sig);
+	} else {
+		status = instrument_now(ps, jni_env, ci, method_sig);
+	}
+
+	uif_respond_instrument(ps->uif, client, status);
 	ps_usr_rq_instrument_method_dealloc(msg);
 }
 
@@ -479,7 +546,7 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 
 	switch (msg->type) {
 	case CLASS_LOADED:
-		handle_class_loaded(ps, msg);
+		handle_class_loaded(ps, jni_env, msg);
 		break;
 	case USR_RQ_LOADED_CLASSES:
 		handle_usr_rq_loaded_classes(ps, msg);
@@ -575,8 +642,12 @@ struct prof_server *ps_init(void)
 		goto fail;
 	}
 
-	if (sem_init(&ps->shutdown_sem, 0, 0) != 0) {
+	if (queued_instrument_list_init(&ps->queued_instruments, 0) != 0) {
 		goto fail_classes;
+	}
+
+	if (sem_init(&ps->shutdown_sem, 0, 0) != 0) {
+		goto fail_queued;
 	}
 
 	if (pthread_mutex_init(&ps->resume_mutex, NULL) != 0) {
@@ -617,6 +688,8 @@ fail_mutex:
 	pthread_mutex_destroy(&ps->resume_mutex);
 fail_sem:
 	sem_destroy(&ps->shutdown_sem);
+fail_queued:
+	queued_instrument_list_deep_destroy(&ps->queued_instruments);
 fail_classes:
 	ci_list_deep_destroy(&ps->loaded_classes);
 fail:
@@ -689,6 +762,7 @@ void ps_destroy(struct prof_server *ps)
 	ps_thread_pause_free(ps->thread_pause);
 
 	ci_list_deep_destroy(&ps->loaded_classes);
+	queued_instrument_list_deep_destroy(&ps->queued_instruments);
 
 	pthread_cond_destroy(&ps->resume_cond);
 	pthread_mutex_destroy(&ps->resume_mutex);
