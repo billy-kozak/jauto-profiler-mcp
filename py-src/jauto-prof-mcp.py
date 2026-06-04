@@ -87,6 +87,24 @@ def instrument_method(class_name: str, method_sig: str) -> str:
 
 
 @mcp.tool()
+def get_instrumented_methods() -> list[dict]:
+    """Return all currently instrumented and deferred methods.
+
+    Each entry is a dict with:
+      class_name  - JVM internal class name
+      method_sig  - method signature in "name:descriptor" form
+      status      - "active" if instrumentation is applied, or "deferred"
+                    if the class has not yet loaded and instrumentation will
+                    be applied when it does
+
+    Use this to audit what is currently being profiled, or to check whether
+    a deferred instrumentation has been promoted to active after its class
+    loaded.
+    """
+    return ProfClient().list_instrumented_methods()
+
+
+@mcp.tool()
 def deinstrument_method(class_name: str, method_sig: str) -> None:
     """Remove instrumentation from a previously instrumented method.
 

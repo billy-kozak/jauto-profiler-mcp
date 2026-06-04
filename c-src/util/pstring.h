@@ -20,6 +20,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 
 struct pstring {
 	uint16_t size;
@@ -29,7 +30,15 @@ struct pstring {
 #define PSTR_MAX ((1 << (sizeof(((struct pstring*)NULL)->size) * 8)) -1)
 
 static inline size_t pstring_total_size(const struct pstring *ps) {
-	return sizeof(*ps) + ps->size;
+    return sizeof(*ps) + ps->size;
+}
+
+static inline uint8_t *pstring_memcpy_to(
+	uint8_t *dst, const struct pstring *ps
+) {
+	size_t sz = pstring_total_size(ps);
+	memcpy(dst, ps, sz);
+	return dst + sz;
 }
 
 struct pstring *pstring_from_cstr(const char *str);

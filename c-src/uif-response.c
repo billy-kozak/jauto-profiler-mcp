@@ -201,4 +201,75 @@ int uif_respond_pause_threads(
 	);
 }
 
+int uif_respond_list_instrumented(
+	struct user_if *uif,
+	struct user_if_client *client,
+	const struct class_info_list *classes,
+	const struct queued_instrument_list *queued
+) {
+	struct user_msg *response;
+	uint8_t *p;
+	uint32_t body_size;
+	uint32_t count;
+	size_t i;
+	size_t j;
+
+	body_size = sizeof(uint32_t);
+	for (i = 0; i < classes->len; i++) {
+		const struct class_info *ci = classes->arr[i];
+		for (j = 0; j < ci->instrumented.len; j++) {
+			body_size += sizeof(uint32_t);
+			body_size += pstring_total_size(ci->name);
+			body_size += pstring_total_size(
+				ci->instrumented.arr[j].method_sig
+			);
+		}
+	}
+	for (i = 0; i < queued->len; i++) {
+		body_size += sizeof(uint32_t);
+		body_size += pstring_total_size(queued->arr[i].class_name);
+		body_size += pstring_total_size(queued->arr[i].method_sig);
+	}
+
+	response = malloc(offsetof(struct user_msg, body) + body_size);
+	if (response == NULL) {
+		return -1;
+	}
+
+	response->type = RESPONSE_LIST_INSTRUMENTED;
+	response->size = body_size;
+	p = response->body.raw;
+
+	count = 0;
+	for (i = 0; i < classes->len; i++) {
+		count += (uint32_t)classes->arr[i]->instrumented.len;
+	}
+	count += (uint32_t)queued->len;
+	memcpy(p, &count, sizeof(count));
+	p += sizeof(count);
+
+	for (i = 0; i < classes->len; i++) {
+		const struct class_info *ci = classes->arr[i];
+		for (j = 0; j < ci->instrumented.len; j++) {
+			uint32_t status = (uint32_t)LISTED_INSTR_ACTIVE;
+			memcpy(p, &status, sizeof(status));
+			p += sizeof(status);
+			p = pstring_memcpy_to(p, ci->name);
+			p = pstring_memcpy_to(
+				p, ci->instrumented.arr[j].method_sig
+			);
+		}
+	}
+	for (i = 0; i < queued->len; i++) {
+		uint32_t status = (uint32_t)LISTED_INSTR_DEFERRED;
+		memcpy(p, &status, sizeof(status));
+		p += sizeof(status);
+		p = pstring_memcpy_to(p, queued->arr[i].class_name);
+		p = pstring_memcpy_to(p, queued->arr[i].method_sig);
+	}
+
+	uif_send(uif, client, response);
+	free(response);
+	return 0;
+}
 

@@ -40,6 +40,11 @@ _MSG_TYPE_REQUEST_RESUME               = 11
 _MSG_TYPE_RESPONSE_RESUME              = 12
 _MSG_TYPE_REQUEST_PAUSE_THREADS        = 13
 _MSG_TYPE_RESPONSE_PAUSE_THREADS       = 14
+_MSG_TYPE_REQUEST_LIST_INSTRUMENTED    = 15
+_MSG_TYPE_RESPONSE_LIST_INSTRUMENTED   = 16
+
+_LISTED_INSTR_ACTIVE   = 0
+_LISTED_INSTR_DEFERRED = 1
 
 _RESUME_STATUS_UNBLOCKED = 0
 _RESUME_STATUS_NOCHANGE  = 1
@@ -343,6 +348,44 @@ class ProfClient:
             )
 
         return "paused" if status == _PAUSE_THREADS_STATUS_OK else "already_paused"
+
+    def list_instrumented_methods(self) -> list[dict]:
+
+        resp = self._send_request(_MSG_TYPE_REQUEST_LIST_INSTRUMENTED)
+
+        if resp.message_type != _MSG_TYPE_RESPONSE_LIST_INSTRUMENTED:
+            raise ValueError("Unexpected response")
+
+        body = resp.raw_body
+        if len(body) < 4:
+            raise ValueError("response body too short")
+
+        (count,) = struct.unpack_from("<I", body, 0)
+        offset = 4
+        result = []
+
+        for _ in range(count):
+            if offset + 4 > len(body):
+                raise ValueError("truncated entry status")
+            (status,) = struct.unpack_from("<I", body, offset)
+            offset += 4
+
+            class_ps = pstring(body, offset)
+            offset += class_ps.size
+
+            sig_ps = pstring(body, offset)
+            offset += sig_ps.size
+
+            result.append({
+                "class_name": class_ps.value,
+                "method_sig": sig_ps.value,
+                "status": (
+                    "deferred" if status == _LISTED_INSTR_DEFERRED
+                    else "active"
+                ),
+            })
+
+        return result
 
     def get_class_methods(self, class_name: str) -> list[str]:
 

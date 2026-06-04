@@ -20,6 +20,8 @@
 
 #include "user-if.h"
 #include "class-info.h"
+#include "class-info-list.h"
+#include "queued-instrument.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -66,6 +68,13 @@ int uif_respond_pause_threads(
 	struct user_if *uif,
 	struct user_if_client *client,
 	enum pause_threads_resp_status status
+);
+
+int uif_respond_list_instrumented(
+	struct user_if *uif,
+	struct user_if_client *client,
+	const struct class_info_list *classes,
+	const struct queued_instrument_list *queued
 );
 
 #endif /* _UIF_RESPONSE_H */

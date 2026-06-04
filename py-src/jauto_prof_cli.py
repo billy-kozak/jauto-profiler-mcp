@@ -88,6 +88,13 @@ def cmd_pause_threads(client, args):
     print(client.pause_threads())
 
 
+def cmd_list_instrumented(client, args):
+    for entry in client.list_instrumented_methods():
+        print(
+            f"{entry['status']}\t{entry['class_name']}\t{entry['method_sig']}"
+        )
+
+
 
 ###############################################################################
 # entry point
@@ -150,6 +157,10 @@ def main():
 
     sub.add_parser('pause-threads', help='suspend all application threads')
 
+    sub.add_parser(
+        'list-instrumented',
+        help='list all instrumented and deferred methods'
+    )
 
     args = parser.parse_args()
 
@@ -165,6 +176,7 @@ def main():
         'shutdown':           ClientCmd(client, cmd_shutdown),
         'resume':             ClientCmd(client, cmd_resume),
         'pause-threads':      ClientCmd(client, cmd_pause_threads),
+        'list-instrumented':  ClientCmd(client, cmd_list_instrumented),
     }
 
     try:

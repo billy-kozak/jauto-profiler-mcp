@@ -448,6 +448,22 @@ respond:
 	ps_usr_rq_deinstrument_method_dealloc(msg);
 }
 
+static void handle_usr_rq_list_instrumented(
+	struct prof_server *ps,
+	struct ps_msg *msg
+) {
+	struct user_if_client *client =
+		msg->body.usr_rq_list_instrumented.client;
+
+	free(msg);
+
+	uif_respond_list_instrumented(
+		ps->uif, client,
+		&ps->loaded_classes, &ps->queued_instruments
+	);
+	uif_client_release(client);
+}
+
 static void handle_usr_rq_pause_threads(
 	struct prof_server *ps,
 	JNIEnv *jni_env,
@@ -568,6 +584,9 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 		break;
 	case USR_RQ_PAUSE_THREADS:
 		handle_usr_rq_pause_threads(ps, jni_env, msg);
+		break;
+	case USR_RQ_LIST_INSTRUMENTED:
+		handle_usr_rq_list_instrumented(ps, msg);
 		break;
 	case PS_SHUTDOWN:
 		free(msg);

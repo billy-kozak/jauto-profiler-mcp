@@ -178,6 +178,8 @@ int ps_uif_handler(
 		return ps_send_usr_rq_resume(ps, client);
 	case REQUEST_PAUSE_THREADS:
 		return ps_send_usr_rq_pause_threads(ps, client);
+	case REQUEST_LIST_INSTRUMENTED:
+		return ps_send_usr_rq_list_instrumented(ps, client);
 	default:
 		return -1;
 	}

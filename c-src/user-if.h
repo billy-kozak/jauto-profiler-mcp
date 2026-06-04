@@ -49,6 +49,8 @@ enum user_msg_type {
 	RESPONSE_RESUME = 12,
 	REQUEST_PAUSE_THREADS = 13,
 	RESPONSE_PAUSE_THREADS = 14,
+	REQUEST_LIST_INSTRUMENTED = 15,
+	RESPONSE_LIST_INSTRUMENTED = 16,
 };
 
 enum instrument_resp_status {
@@ -74,6 +76,22 @@ enum pause_threads_resp_status {
 	PAUSE_THREADS_RP_ALREADY_PAUSED = 1,
 	PAUSE_THREADS_RP_ERROR = 2,
 	PAUSE_THREADS_RP_RACE_FAILURE = 3,
+};
+
+enum listed_instr_status {
+	LISTED_INSTR_ACTIVE   = 0,
+	LISTED_INSTR_DEFERRED = 1,
+};
+
+/*
+ * Body of RESPONSE_LIST_INSTRUMENTED:
+ *   uint32_t count
+ *   count × { uint32_t status, pstring class_name, pstring method_sig }
+ * Entries are variable-length and must be walked sequentially.
+ */
+struct user_msg_instr_list_entry {
+	uint32_t status;
+	/* packed pstrings follow: class_name, then method_sig */
 };
 
 
