@@ -19,6 +19,7 @@
 #include "queued-instrument.h"
 
 #include "util/dyn-arr.h"
+#include "util/pstring.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -34,8 +35,8 @@ static void queued_instrument_init(
 	const char *class_name,
 	const char *method_sig
 ) {
-	qi->class_name = strdup(class_name);
-	qi->method_sig = strdup(method_sig);
+	qi->class_name = pstring_from_cstr(class_name);
+	qi->method_sig = pstring_from_cstr(method_sig);
 }
 
 static void queued_instrument_destroy(struct queued_instrument *qi)
@@ -81,7 +82,7 @@ int queued_instrument_list_find_by_class(
 	size_t i;
 
 	for (i = 0; i < arr->len; i++) {
-		if (strcmp(arr->arr[i].class_name, class_name) == 0) {
+		if (strcmp((char *)arr->arr[i].class_name->str, class_name) == 0) {
 			return (int)i;
 		}
 	}

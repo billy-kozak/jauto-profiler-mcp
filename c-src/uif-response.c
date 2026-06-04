@@ -60,7 +60,7 @@ int uif_respond_loaded_classes(
 
 	body_size = sizeof(uint32_t);
 	for (i = 0; i < count; i++) {
-		body_size += sizeof(uint16_t) + strlen(classes[i]->name);
+		body_size += pstring_total_size(classes[i]->name);
 	}
 
 	response = malloc(offsetof(struct user_msg, body) + body_size);
@@ -77,11 +77,9 @@ int uif_respond_loaded_classes(
 	p += sizeof(cnt);
 
 	for (i = 0; i < count; i++) {
-		uint16_t name_len = (uint16_t)strlen(classes[i]->name);
-		memcpy(p, &name_len, sizeof(name_len));
-		p += sizeof(name_len);
-		memcpy(p, classes[i]->name, name_len);
-		p += name_len;
+		size_t sz = pstring_total_size(classes[i]->name);
+		memcpy(p, classes[i]->name, sz);
+		p += sz;
 	}
 
 	uif_send(uif, client, response);
@@ -202,4 +200,5 @@ int uif_respond_pause_threads(
 		uif, client, RESPONSE_PAUSE_THREADS, &body, sizeof(body)
 	);
 }
+
 

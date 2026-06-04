@@ -53,7 +53,7 @@ struct class_info *class_info_list_find_by_name(
 	size_t i;
 
 	for (i = 0; i < list->len; i++) {
-		if (strcmp(list->arr[i]->name, name) == 0) {
+		if (strcmp((char *)list->arr[i]->name->str, name) == 0) {
 			return list->arr[i];
 		}
 	}

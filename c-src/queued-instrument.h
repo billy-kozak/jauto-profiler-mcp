@@ -19,12 +19,13 @@
 #define _QUEUED_INSTRUMENT_H
 
 #include "util/dyn-arr.h"
+#include "util/pstring.h"
 
 #include <stddef.h>
 
 struct queued_instrument {
-	char *class_name;
-	char *method_sig;
+	struct pstring *class_name;
+	struct pstring *method_sig;
 };
 
 DYNARR_STRUCT(queued_instrument_list, struct queued_instrument)

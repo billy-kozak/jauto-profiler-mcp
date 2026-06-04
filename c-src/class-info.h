@@ -23,6 +23,7 @@
 
 #include <stddef.h>
 
+
 DYNARR_STRUCT(method_list, struct pstring *)
 
 int method_list_init(struct method_list *arr, size_t init_cap);
@@ -31,7 +32,7 @@ void method_list_remove(struct method_list *arr, int index);
 void method_list_deep_destroy(struct method_list *arr);
 
 struct instrumented_method {
-	char *method_sig;
+	struct pstring *method_sig;
 	int profiler_id;
 };
 
@@ -51,7 +52,7 @@ void instrumented_method_list_deep_destroy(
 );
 
 struct class_info {
-	char *name;
+	struct pstring *name;
 	unsigned char *bytecode;
 	size_t bytecode_len;
 	struct method_list methods;

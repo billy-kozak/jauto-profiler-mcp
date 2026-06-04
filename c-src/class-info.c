@@ -20,6 +20,7 @@
 
 #include "util/dyn-arr.h"
 #include "util/log.h"
+#include "util/pstring.h"
 
 #define LOG_TAG "class-info"
 
@@ -49,7 +50,7 @@ DYNARR_FUNCS(
 void instrumented_method_init(
         struct instrumented_method *im, const char *method_sig, int id
 ) {
-	im->method_sig = strdup(method_sig);
+	im->method_sig = pstring_from_cstr(method_sig);
 	im->profiler_id = id;
 }
 
@@ -99,7 +100,7 @@ struct class_info *ci_alloc(
 	if (ci == NULL) {
 		return NULL;
 	}
-	ci->name = strdup(name);
+	ci->name = pstring_from_cstr(name);
 	if (ci->name == NULL) {
 		goto fail;
 	}
@@ -131,7 +132,7 @@ int ci_remove_instrumented_by_sig(
 	size_t i;
 
 	for (i = 0; i < list->len; i++) {
-		if (strcmp(list->arr[i].method_sig, method_sig) == 0) {
+		if (strcmp((char *)list->arr[i].method_sig->str, method_sig) == 0) {
 			int id = list->arr[i].profiler_id;
 			instrumented_method_list_remove_and_destroy(list, (int)i);
 			return id;
@@ -185,16 +186,13 @@ struct class_instrument_params *class_instrument_params_alloc(
 	}
 
 	for (i = 0; i < (size_t)count; i++) {
-		const char *colon = strchr(
-			ci->instrumented.arr[i].method_sig, ':'
-		);
+		const char *sig = (char *)ci->instrumented.arr[i].method_sig->str;
+		const char *colon = strchr(sig, ':');
 		if (colon == NULL) {
 			LOG_ERROR("malformed method_sig in instrumented list");
 			goto fail;
 		}
-		total_buf += (size_t)(
-			colon - ci->instrumented.arr[i].method_sig
-		) + 1;
+		total_buf += (size_t)(colon - sig) + 1;
 		total_buf += strlen(colon + 1) + 1;
 	}
 
@@ -205,7 +203,7 @@ struct class_instrument_params *class_instrument_params_alloc(
 	p->name_buf = buf;
 
 	for (i = 0; i < (size_t)count; i++) {
-		const char *sig = ci->instrumented.arr[i].method_sig;
+		const char *sig = (char *)ci->instrumented.arr[i].method_sig->str;
 		const char *colon = strchr(sig, ':');
 		size_t name_len = (size_t)(colon - sig);
 		size_t desc_len = strlen(colon + 1);

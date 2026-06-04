@@ -194,7 +194,7 @@ static enum instrument_resp_status instrument_now(
 	enum instrument_resp_status status = INSTRUMENT_RP_ERROR;
 	int id;
 
-	id = jni_create_profiler(jni_env, ci->name, method_sig);
+	id = jni_create_profiler(jni_env, (char *)ci->name->str, method_sig);
 	if (id == -1) {
 		return INSTRUMENT_RP_DOUBLE_INSTRUMENT;
 	}
@@ -219,7 +219,7 @@ static enum instrument_resp_status instrument_now(
 	}
 
 	int ret_retransform = retransform_pending(
-		ps, jni_env, ci->name, method_sig, new_bc, new_bc_len, id
+		ps, jni_env, (char *)ci->name->str, method_sig, new_bc, new_bc_len, id
 	);
 	if (ret_retransform != 0) {
 		goto fail_cleanup_instrumented;
@@ -247,21 +247,21 @@ static void do_deferred_instrumentations(
 
 	while (true) {
 		int idx = queued_instrument_list_find_by_class(
-			&ps->queued_instruments, ci->name
+			&ps->queued_instruments, (char *)ci->name->str
 		);
 		if(idx < 0) {
 			break;
 		}
 
-		const char *method_sig = ps->queued_instruments.arr[idx]
-			.method_sig;
+		const char *method_sig = (char *)ps->queued_instruments
+			.arr[idx].method_sig->str;
 		enum instrument_resp_status status = instrument_now(
 			ps, jni_env, ci, method_sig
 		);
 		if (status != INSTRUMENT_RP_OK) {
 			LOG_WARN(
 				"deferred instrumentation failed for %s %s",
-				ci->name, method_sig
+				(char *)ci->name->str, method_sig
 			);
 		}
 		queued_instrument_list_remove_and_destroy(
