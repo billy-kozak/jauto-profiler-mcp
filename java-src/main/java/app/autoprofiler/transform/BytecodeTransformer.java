@@ -37,10 +37,13 @@ class BytecodeTransformer {
     ) {
         ClassReader cr = new ClassReader(classBytes);
         ClassWriter cw = new SafeClassWriter(cr, ClassWriter.COMPUTE_FRAMES);
-        cr.accept(
-            new InstrumentingVisitor(cw, methodNames, methodDescs, profilerIds),
-            ClassReader.SKIP_FRAMES
+        InstrumentingVisitor iv = new InstrumentingVisitor(
+            cw, methodNames, methodDescs, profilerIds
         );
+        cr.accept(iv, ClassReader.SKIP_FRAMES);
+        if (iv.matchedCount < profilerIds.length) {
+            return null;
+        }
         return cw.toByteArray();
     }
 
@@ -71,6 +74,7 @@ class BytecodeTransformer {
         private final String[] targetNames;
         private final String[] targetDescs;
         private final int[] profilerIds;
+        int matchedCount = 0;
 
         InstrumentingVisitor(
             ClassVisitor cv,
@@ -97,6 +101,7 @@ class BytecodeTransformer {
             );
             for (int i = 0; i < targetNames.length; i++) {
                 if (name.equals(targetNames[i]) && descriptor.equals(targetDescs[i])) {
+                    matchedCount++;
                     return new InstrumentingAdapter(mv, profilerIds[i]);
                 }
             }
