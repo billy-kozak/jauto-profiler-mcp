@@ -155,6 +155,12 @@ $(OUT_LIB): $(O_FILES) $(OUTPUT_DIR)/.dir_dummy
 
 java: $(JAR_FILE)
 
+.classpath: $(ASM_JAR)
+	build-src/gen-eclipse-classpath $(JSRC_ROOT) $(ASM_JAR) $(JAVA_BUILD_DIR) $@
+
+.project:
+	build-src/gen-eclipse-project jauto-profiler $@
+
 $(ASM_JAR):
 	JAVA_HOME=$(JAVA_HOME) build-src/download-asm
 

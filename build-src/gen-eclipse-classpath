@@ -1,0 +1,35 @@
+#!/bin/bash
+###############################################################################
+# Copyright (C) 2026  Billy Kozak                                             #
+#                                                                             #
+# This file is part of the jauto-profiler program                             #
+#                                                                             #
+# This program is free software: you can redistribute it and/or modify        #
+# it under the terms of the GNU Lesser General Public License as published by #
+# the Free Software Foundation, either version 3 of the License, or           #
+# (at your option) any later version.                                         #
+#                                                                             #
+# This program is distributed in the hope that it will be useful,             #
+# but WITHOUT ANY WARRANTY; without even the implied warranty of              #
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the               #
+# GNU Lesser General Public License for more details.                         #
+#                                                                             #
+# You should have received a copy of the GNU Lesser General Public License    #
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.       #
+###############################################################################
+set -e
+
+JSRC_ROOT="$1"
+ASM_JAR="$2"
+JAVA_BUILD_DIR="$3"
+OUTPUT="$4"
+
+cat > "$OUTPUT" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="${JSRC_ROOT}"/>
+	<classpathentry kind="lib" path="${ASM_JAR}"/>
+	<classpathentry kind="output" path="${JAVA_BUILD_DIR}"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+</classpath>
+EOF
