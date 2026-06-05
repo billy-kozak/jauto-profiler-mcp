@@ -33,7 +33,7 @@ JAVA_HOME = $(shell build-src/find-java-home)
 JAVA_INC = -I$(JAVA_HOME)/include -I$(JAVA_HOME)/include/linux
 
 JAVAC := $(JAVA_HOME)/bin/javac
-JAVACFLAGS = -cp $(ASM_JAR)
+JAVACFLAGS = -g -cp $(ASM_JAR)
 JAR := $(JAVA_HOME)/bin/jar
 
 LIBS := -lpthread
