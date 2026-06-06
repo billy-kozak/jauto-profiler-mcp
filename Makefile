@@ -47,8 +47,6 @@ endif
 
 CFLAGS += -Wall -fvisibility=hidden -fPIC -ffunction-sections
 LDFLAGS += -Wall -shared -fPIC -Wl,--gc-sections
-
-LDTEST_FLAGS += -Wall -fPIC
 ###############################################################################
 #                                 BUILD DIRS                                  #
 ###############################################################################
@@ -70,7 +68,6 @@ CSRC_ROOT = c-src
 CSRC_DIRS = $(shell find $(CSRC_ROOT) -type d)
 
 CSRC_MAIN = c-src/main
-CSRC_TEST = c-src/test
 
 BUILDSRC_ROOT = build-src
 PYSRC_ROOT = py-src
@@ -81,18 +78,13 @@ NO_DEPS_TARGETS += clean directories
 ###############################################################################
 OUT_LIB := $(OUTPUT_DIR)/jauto-profiler.so
 JAR_FILE := $(OUTPUT_DIR)/jauto-prof-lib.jar
-OUT_TEST := $(OUTPUT_DIR)/prof-server-tests
 
 BIN_FILES := $(OUT_LIB) $(JAR_FILE)
 OUT_DIST := $(DIST_DIR)/jauto-prof.tar.gz
 
-C_MAIN_FILES = $(shell find $(CSRC_MAIN) -name "*.c")
-O_MAIN_FILES = $(C_MAIN_FILES:$(CSRC_ROOT)/%.c=$(OBJ_DIR)/%.o)
-D_MAIN_FILES = $(C_MAIN_FILES:$(CSRC_ROOT)/%.c=$(DEP_DIR)/%.d)
-
-C_TEST_FILES = $(shell find $(CSRC_TEST) -name "*.c")
-O_TEST_FILES = $(C_TEST_FILES:$(CSRC_ROOT)/%.c=$(OBJ_DIR)/%.o)
-D_TEST_FILES = $(C_TEST_FILES:$(CSRC_ROOT)/%.c=$(DEP_DIR)/%.d)
+C_FILES = $(shell find $(CSRC_MAIN) -name "*.c")
+O_FILES = $(C_FILES:$(CSRC_ROOT)/%.c=$(OBJ_DIR)/%.o)
+D_FILES = $(C_FILES:$(CSRC_ROOT)/%.c=$(DEP_DIR)/%.d)
 
 JSRC_ROOT = java-src/main/java
 JAVA_FILES = $(shell find $(JSRC_ROOT) -name "*.java")
@@ -109,7 +101,6 @@ DIST_README = docs/dist-README.md
 vpath %.c $(CSRC_DIRS)
 
 INC = $(JAVA_INC) -I$(CSRC_MAIN)
-CTEST_INC= $(INC) -I$(CSRC_TEST)
 
 CLEAN_FILES += $(wildcard $(BUILD_DIR)/*)
 CLEAN_FILES += $(wildcard $(OUTPUT_DIR)/*)
@@ -143,31 +134,18 @@ debug: CFLAGS +=-O0
 debug: LDFLAGS += -O0
 debug: shared java test
 
-shared: $(D_MAIN_FILES) $(OUT_LIB)
+shared: $(D_FILES) $(OUT_LIB)
 
-test: $(D_TEST_FILES) $(OUT_TEST)
-
-$(D_MAIN_FILES): $(DEP_DIR)/%.d: $(CSRC_ROOT)/%.c
+$(D_FILES): $(DEP_DIR)/%.d: $(CSRC_ROOT)/%.c
 	@mkdir -p $(dir $(@))
 	$(CC) $(INC) -MF $@ -M -MT "$(call d_to_o,$(@))" $<
 
-$(O_MAIN_FILES): $(OBJ_DIR)/%.o: $(CSRC_ROOT)/%.c
+$(O_FILES): $(OBJ_DIR)/%.o: $(CSRC_ROOT)/%.c
 	@mkdir -p $(dir $(@))
 	$(CC) $(INC) $(CFLAGS) -c $< -o $@
 
-$(OUT_LIB): $(O_MAIN_FILES) $(OUTPUT_DIR)/.dir_dummy
-	$(LD) $(LDFLAGS) $(O_MAIN_FILES) $(LIBS) -o $@
-
-$(D_TEST_FILES): $(DEP_DIR)/%.d: $(CSRC_ROOT)/%.c
-	@mkdir -p $(dir $(@))
-	$(CC) $(CTEST_INC) -MF $@ -M -MT "$(call d_to_o,$(@))" $<
-
-$(O_TEST_FILES): $(OBJ_DIR)/%.o: $(CSRC_ROOT)/%.c
-	@mkdir -p $(dir $(@))
-	$(CC) $(CTEST_INC) $(CFLAGS) -c $< -o $@
-
-$(OUT_TEST): $(O_TEST_FILES) $(O_MAIN_FILES) $(OUTPUT_DIR)/.dir_dummy
-	$(LD) $(LDTEST_FLAGS) $(O_TEST_FILES) $(O_MAIN_FILES) $(LIBS) -o $@
+$(OUT_LIB): $(O_FILES) $(OUTPUT_DIR)/.dir_dummy
+	$(LD) $(LDFLAGS) $(O_FILES) $(LIBS) -o $@
 
 %.dir_dummy:
 	mkdir -p $(dir $(@))
@@ -209,13 +187,14 @@ $(OUT_DIST): $(SKILL_DOC) $(DIST_README)
 clean:
 	rm -rf $(CLEAN_FILES)
 
+include build-src/tests.mk
+
 ifeq (,$(filter $(NO_DEPS_TARGETS), $(MAKECMDGOALS)))
 #next two conditonals prevent make from running on dry run or when
 #invoked for tab-completion
 ifneq (n,$(findstring n,$(firstword $(MAKEFLAGS))))
 ifneq (p,$(findstring p,$(firstword $(MAKEFLAGS))))
--include $(D_MAIN_FILES)
--include $(D_TEST_FILES)
+-include $(D_FILES)
 endif
 endif
 endif
