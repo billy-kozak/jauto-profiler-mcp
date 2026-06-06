@@ -67,7 +67,7 @@ DIST_NAME := jauto-prof
 DIST_ROOT := $(DIST_DIR)/$(DIST_NAME)
 
 CSRC_ROOT = c-src
-CSRC_DIRS = $(shell find $(SRC_ROOT) -type d)
+CSRC_DIRS = $(shell find $(CSRC_ROOT) -type d)
 
 CSRC_MAIN = c-src/main
 CSRC_TEST = c-src/test
