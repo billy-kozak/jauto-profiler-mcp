@@ -136,7 +136,7 @@ all: optimized
 dist: $(OUT_DIST)
 
 optimized: CFLAGS +=-Os -flto=auto
-optomized: LDFLAGS += -Os -flto=auto
+optimized: LDFLAGS += -Os -flto=auto
 optimized: shared java test
 
 debug: CFLAGS +=-O0
