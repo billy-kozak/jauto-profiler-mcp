@@ -16,21 +16,27 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "pstring-suite.h"
 #include "murmur3-suite.h"
 
-#include <stdio.h>
+#include "util/murmur3.h"
+#include "testing.h"
+#include "util/intrinsic.h"
 
-int main(int argc, char **argv) {
+TEST_CASE(basic_spread_test) {
 
-	int ret = 0;
+	char test_key1[] = "A";
+	char test_key2[] = "B";
 
-	ret += pstring_suite();
-	ret += murmur3_suite();
+	uint32_t hash1 = murmur3_hash_x86_32(
+		test_key1, sizeof(test_key1), 1234
+	);
+	uint32_t hash2 = murmur3_hash_x86_32(
+		test_key2, sizeof(test_key2), 1234
+	);
 
-	if(ret == 0) {
-		printf("All tests passed!\n");
-	}
+	TEST_ASSERT(popcount32(hash1 ^ hash2) > 10);
 
-	return ret;
+	return 0;
 }
+
+TEST_SUITE(murmur3_suite, basic_spread_test)

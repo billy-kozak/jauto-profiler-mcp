@@ -15,22 +15,12 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
+#ifndef _MURMUR3_SUITE_H_
+#define _MURMUR3_SUITE_H_
 
-#include "pstring-suite.h"
-#include "murmur3-suite.h"
 
-#include <stdio.h>
+#include "testing.h"
 
-int main(int argc, char **argv) {
+TEST_SUITE_DECL(murmur3_suite);
 
-	int ret = 0;
-
-	ret += pstring_suite();
-	ret += murmur3_suite();
-
-	if(ret == 0) {
-		printf("All tests passed!\n");
-	}
-
-	return ret;
-}
+#endif /* _MURMUR3_SUITE_H_ */
