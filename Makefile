@@ -126,7 +126,7 @@ all: optimized
 .PHONY: dist
 dist: $(OUT_DIST)
 
-optimized: CFLAGS +=-Os -flto=auto
+optimized: CFLAGS +=-Os -flto=auto -DNDEBUG
 optimized: LDFLAGS += -Os -flto=auto
 optimized: shared java test
 

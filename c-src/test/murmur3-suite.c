@@ -15,11 +15,9 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
-#include "murmur3-suite.h"
+#include "testing.h"
 
 #include "util/murmur3.h"
-#include "testing.h"
 #include "util/intrinsic.h"
 
 TEST_CASE(basic_spread_test) {

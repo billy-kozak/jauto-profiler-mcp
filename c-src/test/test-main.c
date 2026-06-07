@@ -16,10 +16,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "pstring-suite.h"
-#include "murmur3-suite.h"
-
 #include <stdio.h>
+
+#include "testing.h"
+
+TEST_SUITE_DECL(murmur3_suite);
+TEST_SUITE_DECL(pstring_suite);
+TEST_SUITE_DECL(hash_tab_suite);
 
 int main(int argc, char **argv) {
 
@@ -27,6 +30,7 @@ int main(int argc, char **argv) {
 
 	ret += pstring_suite();
 	ret += murmur3_suite();
+	ret += hash_tab_suite();
 
 	if(ret == 0) {
 		printf("All tests passed!\n");
