@@ -64,7 +64,7 @@ struct prof_server {
 	pthread_cond_t resume_cond;
 	int paused;
 	struct class_info_list loaded_classes;
-	struct queued_instrument_list queued_instruments;
+	struct queued_instr_list queued_instruments;
 	int thread_running;
 	struct pending_instrument pending;
 	jthread agent_thread;
@@ -165,7 +165,7 @@ static enum instrument_resp_status instrument_later(
 	const char *class_name,
 	const char *method_sig
 ) {
-	struct queued_instrument *qi = queued_instrument_list_add_and_init(
+	struct queued_instr *qi = queued_instr_list_add_and_init(
 		&ps->queued_instruments, class_name, method_sig
 	);
 	bool alloc_ok = (
@@ -173,7 +173,7 @@ static enum instrument_resp_status instrument_later(
 	);
 	if (!alloc_ok) {
 		if (qi != NULL) {
-			queued_instrument_list_remove_and_destroy(
+			queued_instr_list_remove_and_destroy(
 				&ps->queued_instruments,
 				(int)(ps->queued_instruments.len - 1)
 			);
@@ -247,7 +247,7 @@ static void do_deferred_instrumentations(
 ) {
 
 	while (true) {
-		int idx = queued_instrument_list_find_by_class(
+		int idx = queued_instr_list_find_by_class(
 			&ps->queued_instruments, (char *)ci->name->str
 		);
 		if(idx < 0) {
@@ -270,7 +270,7 @@ static void do_deferred_instrumentations(
 				(char *)ci->name->str, method_sig
 			);
 		}
-		queued_instrument_list_remove_and_destroy(
+		queued_instr_list_remove_and_destroy(
 			&ps->queued_instruments, idx
 		);
 	}
@@ -684,7 +684,7 @@ struct prof_server *ps_init(void)
 		goto fail;
 	}
 
-	if (queued_instrument_list_init(&ps->queued_instruments, 0) != 0) {
+	if (queued_instr_list_init(&ps->queued_instruments, 0) != 0) {
 		goto fail_classes;
 	}
 
@@ -731,7 +731,7 @@ fail_mutex:
 fail_sem:
 	sem_destroy(&ps->shutdown_sem);
 fail_queued:
-	queued_instrument_list_deep_destroy(&ps->queued_instruments);
+	queued_instr_list_deep_destroy(&ps->queued_instruments);
 fail_classes:
 	ci_list_deep_destroy(&ps->loaded_classes);
 fail:
@@ -804,7 +804,7 @@ void ps_destroy(struct prof_server *ps)
 	ps_thread_pause_free(ps->thread_pause);
 
 	ci_list_deep_destroy(&ps->loaded_classes);
-	queued_instrument_list_deep_destroy(&ps->queued_instruments);
+	queued_instr_list_deep_destroy(&ps->queued_instruments);
 	prof_err_log_destroy(&ps->err_log);
 
 	pthread_cond_destroy(&ps->resume_cond);
