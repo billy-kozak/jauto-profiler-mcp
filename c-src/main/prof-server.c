@@ -33,6 +33,7 @@
 #include "jni/bc-instrument.h"
 #include "ps-thread-state.h"
 #include "queued-instrument.h"
+#include "master-instruments.h"
 #include "prof-err-log.h"
 #include "util/log.h"
 
@@ -65,6 +66,7 @@ struct prof_server {
 	int paused;
 	struct class_info_list loaded_classes;
 	struct queued_instr_list queued_instruments;
+	struct master_instruments *master_instruments;
 	int thread_running;
 	struct pending_instrument pending;
 	jthread agent_thread;
@@ -165,7 +167,7 @@ static enum instrument_resp_status instrument_later(
 	const char *class_name,
 	const char *method_sig
 ) {
-	struct queued_instr *qi = queued_instr_list_add_and_init(
+	struct queued_instr *qi = queued_instr_method_add(
 		&ps->queued_instruments, class_name, method_sig
 	);
 	bool alloc_ok = (
@@ -240,6 +242,29 @@ done:
 	return status;
 }
 
+static void do_deferred_method_instrumentation(
+	struct prof_server *ps,
+	JNIEnv *jni_env,
+	struct class_info *ci,
+	const struct queued_instr *qi
+) {
+	const char *method_sig = (char *)qi->method_sig->str;
+	enum instrument_resp_status status = instrument_now(
+		ps, jni_env, ci, method_sig
+	);
+	if (status != INSTRUMENT_RP_OK) {
+		LOG_WARN(
+			"deferred instrumentation failed for %s %s",
+			(char *)ci->name->str, method_sig
+		);
+		prof_err_log_printf(
+			&ps->err_log,
+			"deferred instrumentation failed: %s %s",
+			(char *)ci->name->str, method_sig
+		);
+	}
+}
+
 static void do_deferred_instrumentations(
 	struct prof_server *ps,
 	JNIEnv *jni_env,
@@ -254,22 +279,13 @@ static void do_deferred_instrumentations(
 			break;
 		}
 
-		const char *method_sig = (char *)ps->queued_instruments
-			.arr[idx].method_sig->str;
-		enum instrument_resp_status status = instrument_now(
-			ps, jni_env, ci, method_sig
-		);
-		if (status != INSTRUMENT_RP_OK) {
-			LOG_WARN(
-				"deferred instrumentation failed for %s %s",
-				(char *)ci->name->str, method_sig
-			);
-			prof_err_log_printf(
-				&ps->err_log,
-				"deferred instrumentation failed: %s %s",
-				(char *)ci->name->str, method_sig
+		struct queued_instr *qi = &ps->queued_instruments.arr[idx];
+		if (qi->type == QI_METHOD) {
+			do_deferred_method_instrumentation(
+				ps, jni_env, ci, qi
 			);
 		}
+		/* TODO: handle QI_LINE_ENTER / QI_LINE_EXIT */
 		queued_instr_list_remove_and_destroy(
 			&ps->queued_instruments, idx
 		);
@@ -688,8 +704,13 @@ struct prof_server *ps_init(void)
 		goto fail_classes;
 	}
 
-	if (sem_init(&ps->shutdown_sem, 0, 0) != 0) {
+	ps->master_instruments = mi_alloc();
+	if (ps->master_instruments == NULL) {
 		goto fail_queued;
+	}
+
+	if (sem_init(&ps->shutdown_sem, 0, 0) != 0) {
+		goto fail_master;
 	}
 
 	if (pthread_mutex_init(&ps->resume_mutex, NULL) != 0) {
@@ -730,6 +751,8 @@ fail_mutex:
 	pthread_mutex_destroy(&ps->resume_mutex);
 fail_sem:
 	sem_destroy(&ps->shutdown_sem);
+fail_master:
+	mi_free(ps->master_instruments);
 fail_queued:
 	queued_instr_list_deep_destroy(&ps->queued_instruments);
 fail_classes:
@@ -805,6 +828,7 @@ void ps_destroy(struct prof_server *ps)
 
 	ci_list_deep_destroy(&ps->loaded_classes);
 	queued_instr_list_deep_destroy(&ps->queued_instruments);
+	mi_free(ps->master_instruments);
 	prof_err_log_destroy(&ps->err_log);
 
 	pthread_cond_destroy(&ps->resume_cond);

@@ -22,6 +22,7 @@
 #include "util/pstring.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
 
 DYNARR_STRUCT(method_list, struct pstring *)
@@ -34,6 +35,7 @@ void method_list_deep_destroy(struct method_list *arr);
 struct instrumented_method {
 	struct pstring *method_sig;
 	int profiler_id;
+	uint64_t instrument_id;
 };
 
 DYNARR_STRUCT(instrumented_method_list, struct instrumented_method)
@@ -51,12 +53,26 @@ void instrumented_method_list_deep_destroy(
 	struct instrumented_method_list *arr
 );
 
+enum instrument_type {
+	INSTRUMENT_ENTER,
+	INSTRUMENT_EXIT
+};
+
+struct instrumented_line {
+	int line_number;
+	int profiler_id;
+	enum instrument_type type;
+};
+
+DYNARR_STRUCT(instrumented_lines, struct instrumented_line)
+
 struct class_info {
 	struct pstring *name;
 	unsigned char *bytecode;
 	size_t bytecode_len;
 	struct method_list methods;
 	struct instrumented_method_list instrumented;
+	struct instrumented_lines lines;
 };
 
 struct class_info *ci_alloc(
@@ -69,6 +85,13 @@ void ci_free(struct class_info *ci);
 int ci_remove_instrumented_by_sig(
 	struct class_info *ci, const char *method_sig
 );
+struct instrumented_line *ci_add_instrumented_line(
+	struct class_info *ci,
+	int line_number,
+	int profiler_id,
+	enum instrument_type type
+);
+int ci_remove_instrumented_line(struct class_info *ci, int line_number);
 
 struct class_instrument_params {
 	const unsigned char *class_data;

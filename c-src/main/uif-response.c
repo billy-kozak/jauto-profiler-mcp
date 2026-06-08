@@ -234,6 +234,9 @@ int uif_respond_list_instrumented(
 		}
 	}
 	for (int i = 0; i < queued->len; i++) {
+		if (queued->arr[i].type != QI_METHOD) {
+			continue;
+		}
 		body_size += sizeof(uint32_t);
 		body_size += pstring_total_size(queued->arr[i].class_name);
 		body_size += pstring_total_size(queued->arr[i].method_sig);
@@ -254,7 +257,11 @@ int uif_respond_list_instrumented(
 		count += (uint32_t)ci->instrumented.len;
 	}
 
-	count += (uint32_t)queued->len;
+	for (int i = 0; i < queued->len; i++) {
+		if (queued->arr[i].type == QI_METHOD) {
+			count++;
+		}
+	}
 	memcpy(p, &count, sizeof(count));
 	p += sizeof(count);
 
@@ -272,6 +279,9 @@ int uif_respond_list_instrumented(
 	}
 
 	for (int i = 0; i < queued->len; i++) {
+		if (queued->arr[i].type != QI_METHOD) {
+			continue;
+		}
 		uint32_t status = (uint32_t)LISTED_INSTR_DEFERRED;
 		memcpy(p, &status, sizeof(status));
 		p += sizeof(status);

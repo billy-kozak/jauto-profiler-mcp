@@ -47,11 +47,14 @@ DYNARR_FUNCS(
 	struct instrumented_method
 )
 
+DYNARR_FUNCS(instrumented_lines, instrumented_lines, struct instrumented_line)
+
 void instrumented_method_init(
         struct instrumented_method *im, const char *method_sig, int id
 ) {
 	im->method_sig = pstring_from_cstr(method_sig);
 	im->profiler_id = id;
+	im->instrument_id = 0;
 }
 
 void instrumented_method_destroy(struct instrumented_method *im) {
@@ -114,7 +117,13 @@ struct class_info *ci_alloc(
 	if (instrumented_method_list_init(&ci->instrumented, 1) != 0) {
 		goto fail_bytecode;
 	}
+	if (instrumented_lines_init(&ci->lines, 1) != 0) {
+		goto fail_instrumented;
+	}
 	return ci;
+
+fail_instrumented:
+	instrumented_method_list_deep_destroy(&ci->instrumented);
 
 fail_bytecode:
 	free(ci->bytecode);
@@ -147,7 +156,37 @@ void ci_free(struct class_info *ci)
 	free(ci->bytecode);
 	method_list_deep_destroy(&ci->methods);
 	instrumented_method_list_deep_destroy(&ci->instrumented);
+	instrumented_lines_destroy(&ci->lines);
 	free(ci);
+}
+
+struct instrumented_line *ci_add_instrumented_line(
+	struct class_info *ci,
+	int line_number,
+	int profiler_id,
+	enum instrument_type type
+) {
+	struct instrumented_line *line = instrumented_lines_add(&ci->lines);
+	if (line != NULL) {
+		line->line_number = line_number;
+		line->profiler_id = profiler_id;
+		line->type = type;
+	}
+	return line;
+}
+
+int ci_remove_instrumented_line(struct class_info *ci, int line_number)
+{
+	struct instrumented_lines *lines = &ci->lines;
+	size_t i;
+
+	for (i = 0; i < lines->len; i++) {
+		if (lines->arr[i].line_number == line_number) {
+			instrumented_lines_remove(lines, (int)i);
+			return 0;
+		}
+	}
+	return -1;
 }
 
 struct class_instrument_params *class_instrument_params_alloc(

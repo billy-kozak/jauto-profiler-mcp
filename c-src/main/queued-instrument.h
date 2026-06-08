@@ -22,10 +22,22 @@
 #include "util/pstring.h"
 
 #include <stddef.h>
+#include <stdint.h>
+
+enum qi_type {
+	QI_METHOD,
+	QI_LINE_ENTER,
+	QI_LINE_EXIT
+};
 
 struct queued_instr {
+	enum qi_type type;
+	uint64_t instrument_id;
 	struct pstring *class_name;
-	struct pstring *method_sig;
+	union {
+		struct pstring *method_sig;
+		int line_number;
+	};
 };
 
 DYNARR_STRUCT(queued_instr_list, struct queued_instr)
@@ -33,7 +45,7 @@ DYNARR_STRUCT(queued_instr_list, struct queued_instr)
 int queued_instr_list_init(
 	struct queued_instr_list *arr, size_t init_cap
 );
-struct queued_instr *queued_instr_list_add_and_init(
+struct queued_instr *queued_instr_method_add(
 	struct queued_instr_list *arr,
 	const char *class_name,
 	const char *method_sig
