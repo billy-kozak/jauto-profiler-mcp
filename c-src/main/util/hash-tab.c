@@ -49,7 +49,7 @@ static int keycmp(
 	}
 }
 
-static void hash_insert(
+static void* hash_insert(
 	struct hash_tab *tab, uint8_t *key, size_t key_len, void *val
 ) {
 	uint32_t hash = murmur3_hash_x86_32(key, key_len, tab->hash_seed);
@@ -85,13 +85,18 @@ static void hash_insert(
 		}
 
 		tab->count += 1;
+		return NULL;
 	} else {
 		/* replace duplicate */
+		void *prev = ent->kv.val;
+
 		free(ent->kv.key);
 
 		ent->kv.key = key;
 		ent->kv.key_len = key_len;
 		ent->kv.val = val;
+
+		return prev;
 	}
 }
 
@@ -179,6 +184,11 @@ static struct hash_entry *ent_lookup(
 	return NULL;
 }
 
+size_t hash_tab_size(const struct hash_tab *tab)
+{
+	return tab->count;
+}
+
 float hash_tab_loading(const struct hash_tab *tab)
 {
 	return (float)(tab->count) / (float)(tab->capacity);
@@ -227,10 +237,15 @@ void* hash_tab_remove(
 	return ret;
 }
 
-int hash_tab_add (
-	struct hash_tab *tab, const uint8_t *key, size_t key_len, void *val
+struct hash_add_result hash_tab_add (
+	struct hash_tab *tab,
+	const uint8_t *key,
+	size_t key_len,
+	void *val
 ) {
+	struct hash_add_result ret = {0, NULL};
 	assert(key != NULL);
+
 	uint8_t *k_cpy = malloc(key_len);
 
 	if(k_cpy == NULL) {
@@ -244,12 +259,12 @@ int hash_tab_add (
 		}
 	}
 
-	hash_insert(tab, k_cpy, key_len, val);
-
-	return 0;
+	ret.prev = hash_insert(tab, k_cpy, key_len, val);
+	return ret;
 fail:
 	free(k_cpy);
-	return -1;
+	ret.err = -1;
+	return ret;
 }
 
 void hash_tab_itr_init(const struct hash_tab *tab, struct hash_tab_itr *itr)

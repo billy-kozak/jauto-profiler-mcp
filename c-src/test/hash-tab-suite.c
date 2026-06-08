@@ -33,7 +33,7 @@ TEST_CASE(basic_lookup_test)
 
 	struct hash_tab *tab = hash_tab_init(NULL);
 
-	TEST_ASSERT(hash_tab_add(tab, k, sizeof(k), v) == 0);
+	TEST_ASSERT(hash_tab_add(tab, k, sizeof(k), v).err == 0);
 
 	unsigned char *val = (unsigned char*)hash_tab_lookup(
 		tab, k, sizeof(k)
@@ -63,9 +63,9 @@ TEST_CASE(rehash_test)
 
 	struct hash_tab *tab = hash_tab_init(&opts);
 
-	TEST_ASSERT(hash_tab_add(tab, k1, sizeof(k1), v1) == 0);
-	TEST_ASSERT(hash_tab_add(tab, k2, sizeof(k2), v2) == 0);
-	TEST_ASSERT(hash_tab_add(tab, k3, sizeof(k3), v3) == 0);
+	TEST_ASSERT(hash_tab_add(tab, k1, sizeof(k1), v1).err == 0);
+	TEST_ASSERT(hash_tab_add(tab, k2, sizeof(k2), v2).err == 0);
+	TEST_ASSERT(hash_tab_add(tab, k3, sizeof(k3), v3).err == 0);
 
 	TEST_ASSERT(hash_tab_loading(tab) < 0.5f);
 
@@ -92,7 +92,7 @@ TEST_CASE(add_rm_itr_test)
 
 	for(int i = 0; i < 25; i++) {
 		uintptr_t v = i;
-		int r = hash_tab_add(tab, k, sizeof(k), (void*)v);
+		int r = hash_tab_add(tab, k, sizeof(k), (void*)v).err;
 
 		TEST_ASSERT(r == 0);
 
@@ -119,6 +119,7 @@ TEST_CASE(add_rm_itr_test)
 		TEST_ASSERT((v == 24) || ((v % 3) != 0));
 	}
 	TEST_ASSERT(count == 17);
+	TEST_ASSERT(count == hash_tab_size(tab));
 
 	k[0] = 'a';
 	for(int i = 0; i < 25; i++) {
@@ -137,4 +138,36 @@ TEST_CASE(add_rm_itr_test)
 	return 0;
 }
 
-TEST_SUITE(hash_tab_suite, basic_lookup_test, rehash_test, add_rm_itr_test)
+TEST_CASE(dup_add_test)
+{
+	unsigned char k[] = "Key 1";
+
+	unsigned char v1[] = "Val 1";
+	unsigned char v2[] = "Val 2";
+
+	struct hash_tab *tab = hash_tab_init(NULL);
+
+	struct hash_add_result r1 = hash_tab_add(tab, k, sizeof(k), v1);
+	struct hash_add_result r2 = hash_tab_add(tab, k, sizeof(k), v2);
+
+	TEST_ASSERT(r1.err == 0 && r1.prev == NULL);
+	TEST_ASSERT(r2.err == 0 && r2.prev == v1);
+
+	unsigned char *val = (unsigned char*)hash_tab_lookup(
+		tab, k, sizeof(k)
+	);
+
+	TEST_ASSERT(un_strcmp(val, v2) == 0);
+
+	hash_tab_destroy(tab, NULL);
+
+	return 0;
+}
+
+TEST_SUITE(
+	hash_tab_suite,
+	basic_lookup_test,
+	rehash_test,
+	add_rm_itr_test,
+	dup_add_test
+)

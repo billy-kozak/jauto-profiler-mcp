@@ -50,7 +50,13 @@ struct hash_tab_opts {
 	float rehash_thresh;
 };
 
+struct hash_add_result {
+	int err;
+	void *prev;
+};
 
+
+size_t hash_tab_size(const struct hash_tab *tab);
 float hash_tab_loading(const struct hash_tab *tab);
 void* hash_tab_lookup(
 	const struct hash_tab *tab, const uint8_t *key, size_t key_len
@@ -58,7 +64,7 @@ void* hash_tab_lookup(
 void* hash_tab_remove(
 	struct hash_tab *tab, const uint8_t *key, size_t key_len
 );
-int hash_tab_add (
+struct hash_add_result hash_tab_add (
 	struct hash_tab *tab, const uint8_t *key, size_t key_len, void *val
 );
 void hash_tab_itr_init(const struct hash_tab *tab, struct hash_tab_itr *itr);

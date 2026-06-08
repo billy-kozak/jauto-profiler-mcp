@@ -18,65 +18,73 @@
 
 #include "class-info-list.h"
 
-#include "util/dyn-arr.h"
+#include "util/hash-tab.h"
+#include "util/log.h"
 
 #include <stddef.h>
 #include <string.h>
 
-DYNARR_FUNCS(class_info_list, class_info_list, struct class_info *)
+#define LOG_TAG "ci-list"
 
-int class_info_list_append(
-	struct class_info_list *list, struct class_info *ci
-) {
-	struct class_info **slot = class_info_list_add(list);
-
-	if (slot == NULL) {
-		return -1;
-	}
-	*slot = ci;
-	return 0;
-}
-
-void class_info_list_deep_destroy(struct class_info_list *list)
+static void ci_destructor(void *ci_ptr)
 {
-	size_t i;
-
-	for (i = 0; i < list->len; i++) {
-		ci_free(list->arr[i]);
-	}
-	class_info_list_destroy(list);
+	struct class_info *ci = ci_ptr;
+	ci_free(ci);
 }
 
-struct class_info *class_info_list_find_by_name(
-	const struct class_info_list *list, const char *name
-) {
-	size_t i;
-
-	for (i = 0; i < list->len; i++) {
-		if (strcmp((char *)list->arr[i]->name->str, name) == 0) {
-			return list->arr[i];
-		}
-	}
-	return NULL;
-}
-
-int ci_list_init(struct class_info_list *list, size_t init_cap)
+size_t ci_list_size(const struct class_info_list *list)
 {
-	return class_info_list_init(list, init_cap);
+	return hash_tab_size(list->tab);
+}
+
+void ci_list_itr_init(
+	const struct class_info_list *list, struct hash_tab_itr *itr
+) {
+	hash_tab_itr_init(list->tab, itr);
+}
+
+struct class_info *ci_list_iterate(
+	const struct class_info_list *list, struct hash_tab_itr *itr
+) {
+	const struct hash_tab_kv *kv = hash_tab_iterate(list->tab, itr);
+
+	if(kv == NULL) {
+		return NULL;
+	}
+
+	return kv->val;
+}
+
+int ci_list_init(struct class_info_list *list)
+{
+	list->tab = hash_tab_init(NULL);
+	return list->tab != NULL ? 0 : 1;
 }
 
 int ci_list_add(struct class_info_list *list, struct class_info *ci)
 {
-	return class_info_list_append(list, ci);
+	uint8_t *name = (unsigned char*)ci->name->str;
+	struct hash_add_result r = hash_tab_add(
+		list->tab, name, ci->name->size, ci
+	);
+
+	if(r.prev != NULL) {
+		LOG_ERROR("Duplicate class add '%s'", ci->name->str);
+		ci_destructor(r.prev);
+	}
+
+	return r.err;
 }
 
 void ci_list_deep_destroy(struct class_info_list *list)
 {
-	class_info_list_deep_destroy(list);
+	hash_tab_destroy(list->tab, ci_destructor);
 }
 
 struct class_info *ci_list_find_by_name(
 	const struct class_info_list *list, const char *name
 ) {
-	return class_info_list_find_by_name(list, name);
+	const uint8_t *uname = (const unsigned char*)name;
+	size_t name_len = strlen(name);
+	return hash_tab_lookup(list->tab, uname, name_len);
 }

@@ -19,6 +19,8 @@
 #include "uif-response.h"
 
 #include "util/pstring.h"
+#include "class-info-list.h"
+#include "util/hash-tab.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -49,18 +51,22 @@ static int uif_send_short_response(
 int uif_respond_loaded_classes(
 	struct user_if *uif,
 	struct user_if_client *client,
-	struct class_info **classes,
-	size_t count
+	struct class_info_list *classes
 ) {
 	struct user_msg *response;
 	uint8_t *p;
 	uint32_t body_size;
 	uint32_t cnt;
-	size_t i;
+	struct hash_tab_itr itr;
+	struct class_info *ci;
+	uint32_t count = ci_list_size(classes);
+
 
 	body_size = sizeof(uint32_t);
-	for (i = 0; i < count; i++) {
-		body_size += pstring_total_size(classes[i]->name);
+
+	ci_list_itr_init(classes, &itr);
+	while((ci = ci_list_iterate(classes, &itr)) != NULL) {
+		body_size += pstring_total_size(ci->name);
 	}
 
 	response = malloc(offsetof(struct user_msg, body) + body_size);
@@ -76,9 +82,10 @@ int uif_respond_loaded_classes(
 	memcpy(p, &cnt, sizeof(cnt));
 	p += sizeof(cnt);
 
-	for (i = 0; i < count; i++) {
-		size_t sz = pstring_total_size(classes[i]->name);
-		memcpy(p, classes[i]->name, sz);
+	ci_list_itr_init(classes, &itr);
+	while((ci = ci_list_iterate(classes, &itr)) != NULL) {
+		size_t sz = pstring_total_size(ci->name);
+		memcpy(p, ci->name, sz);
 		p += sz;
 	}
 
@@ -211,13 +218,14 @@ int uif_respond_list_instrumented(
 	uint8_t *p;
 	uint32_t body_size;
 	uint32_t count;
-	size_t i;
-	size_t j;
+	struct hash_tab_itr itr;
+	struct class_info *ci;
 
 	body_size = sizeof(uint32_t);
-	for (i = 0; i < classes->len; i++) {
-		const struct class_info *ci = classes->arr[i];
-		for (j = 0; j < ci->instrumented.len; j++) {
+
+	ci_list_itr_init(classes, &itr);
+	while((ci = ci_list_iterate(classes, &itr)) != NULL) {
+		for (int j = 0; j < ci->instrumented.len; j++) {
 			body_size += sizeof(uint32_t);
 			body_size += pstring_total_size(ci->name);
 			body_size += pstring_total_size(
@@ -225,7 +233,7 @@ int uif_respond_list_instrumented(
 			);
 		}
 	}
-	for (i = 0; i < queued->len; i++) {
+	for (int i = 0; i < queued->len; i++) {
 		body_size += sizeof(uint32_t);
 		body_size += pstring_total_size(queued->arr[i].class_name);
 		body_size += pstring_total_size(queued->arr[i].method_sig);
@@ -241,16 +249,18 @@ int uif_respond_list_instrumented(
 	p = response->body.raw;
 
 	count = 0;
-	for (i = 0; i < classes->len; i++) {
-		count += (uint32_t)classes->arr[i]->instrumented.len;
+	ci_list_itr_init(classes, &itr);
+	while((ci = ci_list_iterate(classes, &itr)) != NULL) {
+		count += (uint32_t)ci->instrumented.len;
 	}
+
 	count += (uint32_t)queued->len;
 	memcpy(p, &count, sizeof(count));
 	p += sizeof(count);
 
-	for (i = 0; i < classes->len; i++) {
-		const struct class_info *ci = classes->arr[i];
-		for (j = 0; j < ci->instrumented.len; j++) {
+	ci_list_itr_init(classes, &itr);
+	while((ci = ci_list_iterate(classes, &itr)) != NULL) {
+		for (int j = 0; j < ci->instrumented.len; j++) {
 			uint32_t status = (uint32_t)LISTED_INSTR_ACTIVE;
 			memcpy(p, &status, sizeof(status));
 			p += sizeof(status);
@@ -260,7 +270,8 @@ int uif_respond_list_instrumented(
 			);
 		}
 	}
-	for (i = 0; i < queued->len; i++) {
+
+	for (int i = 0; i < queued->len; i++) {
 		uint32_t status = (uint32_t)LISTED_INSTR_DEFERRED;
 		memcpy(p, &status, sizeof(status));
 		p += sizeof(status);

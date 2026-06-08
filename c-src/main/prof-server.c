@@ -82,8 +82,7 @@ static void handle_usr_rq_loaded_classes(
 	free(msg);
 
 	uif_respond_loaded_classes(
-		ps->uif, client,
-		ps->loaded_classes.arr, ps->loaded_classes.len
+		ps->uif, client, &ps->loaded_classes
 	);
 	uif_client_release(client);
 }
@@ -681,7 +680,7 @@ struct prof_server *ps_init(void)
 	ps->paused = prof_pause_on_start();
 	prof_err_log_init(&ps->err_log);
 
-	if (ci_list_init(&ps->loaded_classes, 0) != 0) {
+	if (ci_list_init(&ps->loaded_classes) != 0) {
 		goto fail;
 	}
 

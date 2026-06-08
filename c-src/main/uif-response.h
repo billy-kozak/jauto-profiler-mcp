@@ -30,8 +30,7 @@
 int uif_respond_loaded_classes(
 	struct user_if *uif,
 	struct user_if_client *client,
-	struct class_info **classes,
-	size_t count
+	struct class_info_list *classes
 );
 
 int uif_respond_class_methods(

@@ -19,13 +19,22 @@
 #define _CLASS_INFO_LIST_H
 
 #include "class-info.h"
-#include "util/dyn-arr.h"
+#include "util/hash-tab.h"
 
 #include <stddef.h>
 
-DYNARR_STRUCT(class_info_list, struct class_info *)
+struct class_info_list {
+	struct hash_tab* tab;
+};
 
-int ci_list_init(struct class_info_list *list, size_t init_cap);
+struct class_info *ci_list_iterate(
+	const struct class_info_list *list, struct hash_tab_itr *itr
+);
+void ci_list_itr_init(
+	const struct class_info_list *list, struct hash_tab_itr *itr
+);
+size_t ci_list_size(const struct class_info_list *list);
+int ci_list_init(struct class_info_list *list);
 int ci_list_add(struct class_info_list *list, struct class_info *ci);
 void ci_list_deep_destroy(struct class_info_list *list);
 struct class_info *ci_list_find_by_name(
