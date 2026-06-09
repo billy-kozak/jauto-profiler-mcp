@@ -21,7 +21,7 @@
 #include "user-if.h"
 #include "class-info.h"
 #include "class-info-list.h"
-#include "queued-instrument.h"
+#include "master-instruments.h"
 #include "prof-err-log.h"
 
 #include <stddef.h>
@@ -74,8 +74,7 @@ int uif_respond_pause_threads(
 int uif_respond_list_instrumented(
 	struct user_if *uif,
 	struct user_if_client *client,
-	const struct class_info_list *classes,
-	const struct queued_instr_list *queued
+	const struct master_instruments *mi
 );
 
 int uif_respond_get_async_errors(

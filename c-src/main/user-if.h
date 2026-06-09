@@ -88,11 +88,13 @@ enum listed_instr_status {
 /*
  * Body of RESPONSE_LIST_INSTRUMENTED:
  *   uint32_t count
- *   count × { uint32_t status, pstring class_name, pstring method_sig }
+ *   count × { uint32_t status, uint64_t instrument_id,
+ *              pstring class_name, pstring method_sig }
  * Entries are variable-length and must be walked sequentially.
  */
-struct user_msg_instr_list_entry {
+struct PACKED user_msg_instr_list_entry {
 	uint32_t status;
+	uint64_t instrument_id;
 	/* packed pstrings follow: class_name, then method_sig */
 };
 

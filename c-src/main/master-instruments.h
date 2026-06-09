@@ -18,6 +18,8 @@
 #ifndef _MASTER_INSTRUMENTS_H
 #define _MASTER_INSTRUMENTS_H
 
+#include "util/pstring.h"
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -27,7 +29,24 @@ enum mi_type {
 };
 
 struct master_instruments;
-struct mi_entry;
+
+struct mi_entry {
+	enum mi_type type;
+	struct pstring *entry_class_name;
+	union {
+		struct {
+			struct pstring *method_name;
+			bool deferred;
+		} method;
+		struct {
+			struct pstring *exit_class_name;
+			int entry_line_number;
+			int exit_line_number;
+			bool entry_deferred;
+			bool exit_deferred;
+		} line;
+	};
+};
 
 struct mi_itr {
 	void *_next;
@@ -64,6 +83,7 @@ int mi_mark_line_exit_applied(struct master_instruments *mi, uint64_t id);
 const struct mi_entry *mi_find(
 	const struct master_instruments *mi, uint64_t id
 );
+
 
 void mi_itr_init(const struct master_instruments *mi, struct mi_itr *itr);
 struct mi_itr_result mi_iterate(

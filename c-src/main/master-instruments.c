@@ -26,24 +26,6 @@
 #include <stdint.h>
 #include <assert.h>
 
-struct mi_entry {
-	enum mi_type type;
-	struct pstring *entry_class_name;
-	union {
-		struct {
-			struct pstring *method_name;
-			bool deferred;
-		} method;
-		struct {
-			struct pstring *exit_class_name;
-			int entry_line_number;
-			int exit_line_number;
-			bool entry_deferred;
-			bool exit_deferred;
-		} line;
-	};
-};
-
 struct master_instruments {
 	struct hash_tab *tab;
 	uint64_t next_id;

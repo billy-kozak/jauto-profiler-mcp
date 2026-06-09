@@ -92,7 +92,8 @@ def cmd_pause_threads(client, args):
 def cmd_list_instrumented(client, args):
     for entry in client.list_instrumented_methods():
         print(
-            f"{entry['status']}\t{entry['class_name']}\t{entry['method_sig']}"
+            f"{entry['status']}\t{entry['instrument_id']}"
+            f"\t{entry['class_name']}\t{entry['method_sig']}"
         )
 
 

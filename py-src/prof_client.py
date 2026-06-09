@@ -366,11 +366,16 @@ class ProfClient:
         offset = 4
         result = []
 
+        _ENTRY_HDR_FMT  = "<IQ"
+        _ENTRY_HDR_SIZE = struct.calcsize(_ENTRY_HDR_FMT)
+
         for _ in range(count):
-            if offset + 4 > len(body):
-                raise ValueError("truncated entry status")
-            (status,) = struct.unpack_from("<I", body, offset)
-            offset += 4
+            if offset + _ENTRY_HDR_SIZE > len(body):
+                raise ValueError("truncated entry header")
+            status, instrument_id = struct.unpack_from(
+                _ENTRY_HDR_FMT, body, offset
+            )
+            offset += _ENTRY_HDR_SIZE
 
             class_ps = pstring(body, offset)
             offset += class_ps.size
@@ -381,6 +386,7 @@ class ProfClient:
             result.append({
                 "class_name": class_ps.value,
                 "method_sig": sig_ps.value,
+                "instrument_id": instrument_id,
                 "status": (
                     "deferred" if status == _LISTED_INSTR_DEFERRED
                     else "active"

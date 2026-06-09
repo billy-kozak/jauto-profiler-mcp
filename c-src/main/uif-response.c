@@ -19,7 +19,6 @@
 #include "uif-response.h"
 
 #include "util/pstring.h"
-#include "class-info-list.h"
 #include "util/hash-tab.h"
 
 #include <stddef.h>
@@ -212,35 +211,27 @@ int uif_respond_pause_threads(
 int uif_respond_list_instrumented(
 	struct user_if *uif,
 	struct user_if_client *client,
-	const struct class_info_list *classes,
-	const struct queued_instr_list *queued
+	const struct master_instruments *mi
 ) {
 	struct user_msg *response;
+	struct mi_itr itr;
+	struct mi_itr_result result;
 	uint8_t *p;
 	uint32_t body_size;
 	uint32_t count;
-	struct hash_tab_itr itr;
-	struct class_info *ci;
 
 	body_size = sizeof(uint32_t);
+	count = 0;
 
-	ci_list_itr_init(classes, &itr);
-	while((ci = ci_list_iterate(classes, &itr)) != NULL) {
-		for (int j = 0; j < ci->instrumented.len; j++) {
-			body_size += sizeof(uint32_t);
-			body_size += pstring_total_size(ci->name);
-			body_size += pstring_total_size(
-				ci->instrumented.arr[j].method_sig
-			);
-		}
-	}
-	for (int i = 0; i < queued->len; i++) {
-		if (queued->arr[i].type != QI_METHOD) {
+	mi_itr_init(mi, &itr);
+	while ((result = mi_iterate(mi, &itr)).entry != NULL) {
+		if (result.entry->type != MI_METHOD) {
 			continue;
 		}
-		body_size += sizeof(uint32_t);
-		body_size += pstring_total_size(queued->arr[i].class_name);
-		body_size += pstring_total_size(queued->arr[i].method_sig);
+		body_size += sizeof(struct user_msg_instr_list_entry);
+		body_size += pstring_total_size(result.entry->entry_class_name);
+		body_size += pstring_total_size(result.entry->method.method_name);
+		count++;
 	}
 
 	response = malloc(offsetof(struct user_msg, body) + body_size);
@@ -252,42 +243,23 @@ int uif_respond_list_instrumented(
 	response->size = body_size;
 	p = response->body.raw;
 
-	count = 0;
-	ci_list_itr_init(classes, &itr);
-	while((ci = ci_list_iterate(classes, &itr)) != NULL) {
-		count += (uint32_t)ci->instrumented.len;
-	}
-
-	for (int i = 0; i < queued->len; i++) {
-		if (queued->arr[i].type == QI_METHOD) {
-			count++;
-		}
-	}
 	memcpy(p, &count, sizeof(count));
 	p += sizeof(count);
 
-	ci_list_itr_init(classes, &itr);
-	while((ci = ci_list_iterate(classes, &itr)) != NULL) {
-		for (int j = 0; j < ci->instrumented.len; j++) {
-			uint32_t status = (uint32_t)LISTED_INSTR_ACTIVE;
-			memcpy(p, &status, sizeof(status));
-			p += sizeof(status);
-			p = pstring_memcpy_to(p, ci->name);
-			p = pstring_memcpy_to(
-				p, ci->instrumented.arr[j].method_sig
-			);
-		}
-	}
-
-	for (int i = 0; i < queued->len; i++) {
-		if (queued->arr[i].type != QI_METHOD) {
+	mi_itr_init(mi, &itr);
+	while ((result = mi_iterate(mi, &itr)).entry != NULL) {
+		if (result.entry->type != MI_METHOD) {
 			continue;
 		}
-		uint32_t status = (uint32_t)LISTED_INSTR_DEFERRED;
-		memcpy(p, &status, sizeof(status));
-		p += sizeof(status);
-		p = pstring_memcpy_to(p, queued->arr[i].class_name);
-		p = pstring_memcpy_to(p, queued->arr[i].method_sig);
+		struct user_msg_instr_list_entry hdr = {
+			result.entry->method.deferred
+				? LISTED_INSTR_DEFERRED : LISTED_INSTR_ACTIVE,
+			result.id
+		};
+		memcpy(p, &hdr, sizeof(hdr));
+		p += sizeof(hdr);
+		p = pstring_memcpy_to(p, result.entry->entry_class_name);
+		p = pstring_memcpy_to(p, result.entry->method.method_name);
 	}
 
 	uif_send(uif, client, response);

@@ -539,10 +539,7 @@ static void handle_usr_rq_list_instrumented(
 
 	free(msg);
 
-	uif_respond_list_instrumented(
-		ps->uif, client,
-		&ps->loaded_classes, &ps->queued_instruments
-	);
+	uif_respond_list_instrumented(ps->uif, client, ps->master_instruments);
 	uif_client_release(client);
 }
 
