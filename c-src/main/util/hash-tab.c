@@ -33,11 +33,16 @@ struct hash_entry {
 struct hash_tab {
 	size_t capacity;
 	size_t count;
-	uint32_t hash_seed;
+	hash_tab_hash_func hash_fn;
 	double thresh;
 	struct hash_entry *head;
 	struct hash_entry *tab;
 };
+
+static uint32_t hashtab_default_hash(const uint8_t *key, size_t key_len)
+{
+	return murmur3_hash_x86_32(key, key_len, HASHTAB_SEED_DEFAULT);
+}
 
 static int keycmp(
 	const struct hash_tab_kv *kv, const uint8_t *key, size_t key_len
@@ -52,7 +57,7 @@ static int keycmp(
 static void* hash_insert(
 	struct hash_tab *tab, uint8_t *key, size_t key_len, void *val
 ) {
-	uint32_t hash = murmur3_hash_x86_32(key, key_len, tab->hash_seed);
+	uint32_t hash = tab->hash_fn(key, key_len);
 	int idx = hash % tab->capacity;
 	int i;
 	struct hash_entry *ent;
@@ -166,7 +171,7 @@ static int rehash(struct hash_tab *tab)
 static struct hash_entry *ent_lookup(
 	const struct hash_tab *tab, const uint8_t *key, size_t key_len
 ) {
-	uint32_t hash = murmur3_hash_x86_32(key, key_len, tab->hash_seed);
+	uint32_t hash = tab->hash_fn(key, key_len);
 	int idx = hash % tab->capacity;
 
 
@@ -312,12 +317,14 @@ struct hash_tab *hash_tab_init(const struct hash_tab_opts *opts)
 	struct hash_entry *tab = NULL;
 	size_t cap = HASHTAB_CAP_DEFAULT;
 	float thresh = HASHTAB_THRESH_DEFAULT;
-	uint32_t seed = HASHTAB_SEED_DEFAULT;
+	hash_tab_hash_func hash_fn = hashtab_default_hash;
 
 	if(opts != NULL) {
 		cap = opts->cap_init;
 		thresh = opts->rehash_thresh;
-		seed = opts->hash_seed;
+		if(opts->hash_func != NULL) {
+			hash_fn = opts->hash_func;
+		}
 	}
 
 	assert(cap != 0);
@@ -334,7 +341,7 @@ struct hash_tab *hash_tab_init(const struct hash_tab_opts *opts)
 
 	hash_tab->capacity = cap;
 	hash_tab->count = 0;
-	hash_tab->hash_seed = seed;
+	hash_tab->hash_fn = hash_fn;
 	hash_tab->thresh = thresh;
 	hash_tab->head = NULL;
 	hash_tab->tab = tab;

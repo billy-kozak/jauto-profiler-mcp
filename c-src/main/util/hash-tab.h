@@ -25,7 +25,9 @@
 #define HASHTAB_THRESH_DEFAULT 0.66f
 #define HASHTAB_SEED_DEFAULT 560392091UL
 #define HASHTAB_OPTS_DEFAULT \
-	{HASHTAB_CAP_DEFAULT, HASHTAB_SEED_DEFAULT, HASHTAB_THRESH_DEFAULT}
+	{HASHTAB_CAP_DEFAULT, HASHTAB_THRESH_DEFAULT, NULL}
+
+typedef uint32_t (*hash_tab_hash_func)(const uint8_t *key, size_t key_len);
 
 struct hash_tab;
 
@@ -39,15 +41,10 @@ struct hash_tab_kv {
 	void *val;
 };
 
-struct rehash_thresh {
-	uint32_t n;
-	uint32_t d;
-};
-
 struct hash_tab_opts {
 	size_t cap_init;
-	uint32_t hash_seed;
 	float rehash_thresh;
+	hash_tab_hash_func hash_func;
 };
 
 struct hash_add_result {

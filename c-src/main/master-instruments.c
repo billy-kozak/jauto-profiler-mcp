@@ -49,9 +49,19 @@ static void mi_entry_free(void *p)
 	free(e);
 }
 
+static uint32_t mi_id_hash(const uint8_t *key, size_t key_len)
+{
+	assert(key_len == sizeof(uint64_t));
+	uint64_t id;
+	memcpy(&id, key, sizeof(id));
+	return (uint32_t)id;
+}
+
 struct master_instruments *mi_alloc(void)
 {
-	static const struct hash_tab_opts opts = HASHTAB_OPTS_DEFAULT;
+	static const struct hash_tab_opts opts = {
+		HASHTAB_CAP_DEFAULT, HASHTAB_THRESH_DEFAULT, mi_id_hash
+	};
 
 	struct master_instruments *mi = malloc(sizeof(*mi));
 	if (mi == NULL) {
