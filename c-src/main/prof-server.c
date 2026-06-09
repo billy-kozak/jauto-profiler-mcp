@@ -94,7 +94,9 @@ static void handle_usr_rq_class_methods(
 	struct ps_msg *msg
 ) {
 	const char *class_name = msg->body.usr_rq_class_methods.class_name;
-	struct class_info *ci = ci_list_find_by_name(&ps->loaded_classes, class_name);
+	struct class_info *ci = ci_list_find_by_name(
+		&ps->loaded_classes, class_name
+	);
 
 	uif_respond_class_methods(
 		ps->uif, msg->body.usr_rq_class_methods.client, ci
@@ -222,7 +224,13 @@ static enum instrument_resp_status instrument_now(
 	}
 
 	int ret_retransform = retransform_pending(
-		ps, jni_env, (char *)ci->name->str, method_sig, new_bc, new_bc_len, id
+		ps,
+		jni_env,
+		(char *)ci->name->str,
+		method_sig,
+		new_bc,
+		new_bc_len,
+		id
 	);
 	if (ret_retransform != 0) {
 		goto fail_cleanup_instrumented;
@@ -327,7 +335,8 @@ static void handle_usr_rq_instrument_method(
 	JNIEnv *jni_env,
 	struct ps_msg *msg
 ) {
-	struct user_if_client *client = msg->body.usr_rq_instrument_method.client;
+	struct user_if_client *client =
+		msg->body.usr_rq_instrument_method.client;
 	const char *class_name = msg->body.usr_rq_instrument_method.class_name;
 	const char *method_sig = msg->body.usr_rq_instrument_method.method_sig;
 	struct class_info *ci;
@@ -415,7 +424,9 @@ static void handle_usr_rq_deinstrument_method(
 	struct user_if_client *client =
 		msg->body.usr_rq_deinstrument_method.client;
 
-	struct class_info *ci = ci_list_find_by_name(&ps->loaded_classes, class_name);
+	struct class_info *ci = ci_list_find_by_name(
+		&ps->loaded_classes, class_name
+	);
 	unsigned char *new_bc = NULL;
 	size_t new_bc_len;
 	enum deinstrument_resp_status resp_status = DEINSTRUMENT_RP_OK;
@@ -659,9 +670,14 @@ static void JNICALL event_loop(jvmtiEnv *jvmti_env, JNIEnv *jni_env, void *arg)
 		sem_post(&ps->shutdown_sem);
 		return;
 	}
+	jvmtiError err = (*jvmti_env)->GetCurrentThread(
+		jvmti_env, &cur_thread
+	);
 
-	if ((*jvmti_env)->GetCurrentThread(jvmti_env, &cur_thread) == JVMTI_ERROR_NONE) {
-		ps->agent_thread = (*jni_env)->NewGlobalRef(jni_env, cur_thread);
+	if (err == JVMTI_ERROR_NONE) {
+		ps->agent_thread = (*jni_env)->NewGlobalRef(
+			jni_env, cur_thread
+		);
 	}
 	LOG_INFO("startup: agent_thread=%p", (void *)ps->agent_thread);
 
