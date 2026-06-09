@@ -44,6 +44,8 @@ _MSG_TYPE_REQUEST_LIST_INSTRUMENTED    = 15
 _MSG_TYPE_RESPONSE_LIST_INSTRUMENTED   = 16
 _MSG_TYPE_REQUEST_GET_ASYNC_ERRORS     = 17
 _MSG_TYPE_RESPONSE_GET_ASYNC_ERRORS    = 18
+_MSG_TYPE_REQUEST_DEINSTRUMENT_BY_ID   = 19
+_MSG_TYPE_RESPONSE_DEINSTRUMENT_BY_ID  = 20
 
 _LISTED_INSTR_ACTIVE   = 0
 _LISTED_INSTR_DEFERRED = 1
@@ -425,6 +427,23 @@ class ProfClient:
             })
 
         return result
+
+    def deinstrument_by_id(self, instrument_id: int) -> None:
+
+        body = struct.pack("<Q", instrument_id)
+
+        resp = self._send_request(
+            _MSG_TYPE_REQUEST_DEINSTRUMENT_BY_ID,
+            body
+        )
+
+        if resp.message_type != _MSG_TYPE_RESPONSE_DEINSTRUMENT_BY_ID:
+            raise ValueError("Unexpected response")
+
+        (status,) = struct.unpack("<I", resp.raw_body)
+
+        if status != 0:
+            raise RuntimeError("deinstrument_by_id failed")
 
     def get_class_methods(self, class_name: str) -> list[str]:
 

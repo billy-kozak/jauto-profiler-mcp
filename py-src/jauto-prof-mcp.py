@@ -125,6 +125,21 @@ def get_instrumented_methods() -> list[dict]:
 
 
 @mcp.tool()
+def deinstrument_by_id(instrument_id: int) -> None:
+    """Remove instrumentation using the instrument ID returned by instrument_method.
+
+    instrument_id: the integer ID returned by a previous instrument_method call
+
+    Removes the instrumentation without requiring the original class name or
+    method signature. Handles both active and deferred instrumentations. Use
+    get_instrumented_methods to look up instrument IDs if needed.
+
+    Raises on failure (e.g. if the ID is not found).
+    """
+    ProfClient().deinstrument_by_id(instrument_id)
+
+
+@mcp.tool()
 def deinstrument_method(class_name: str, method_sig: str) -> None:
     """Remove instrumentation from a previously instrumented method.
 

@@ -92,3 +92,16 @@ int queued_instr_list_find_by_class(
 	}
 	return -1;
 }
+
+int queued_instr_list_find_by_instrument_id(
+	const struct queued_instr_list *arr, uint64_t instrument_id
+) {
+	size_t i;
+
+	for (i = 0; i < arr->len; i++) {
+		if (arr->arr[i].instrument_id == instrument_id) {
+			return (int)i;
+		}
+	}
+	return -1;
+}

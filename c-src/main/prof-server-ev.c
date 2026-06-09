@@ -426,6 +426,33 @@ int ps_send_usr_rq_get_async_errors(
 	return 0;
 }
 
+int ps_send_usr_rq_deinstrument_by_id(
+	struct prof_server *ps,
+	struct user_if_client *client,
+	uint64_t instrument_id
+) {
+	struct ps_msg *msg;
+
+	msg = malloc(sizeof(*msg));
+	if (msg == NULL) {
+		return -1;
+	}
+
+	uif_client_acquire(client);
+
+	msg->type = USR_RQ_DEINSTRUMENT_BY_ID;
+	msg->body.usr_rq_deinstrument_by_id.client = client;
+	msg->body.usr_rq_deinstrument_by_id.instrument_id = instrument_id;
+
+	if (ps_send_ev(ps, msg, sizeof(*msg)) != 0) {
+		uif_client_release(client);
+		free(msg);
+		return -1;
+	}
+
+	return 0;
+}
+
 int ps_send_usr_rq_resume(
 	struct prof_server *ps, struct user_if_client *client
 ) {

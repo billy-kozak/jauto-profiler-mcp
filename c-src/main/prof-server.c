@@ -517,6 +517,106 @@ respond:
 	ps_usr_rq_deinstrument_method_dealloc(msg);
 }
 
+static void handle_usr_rq_deinstrument_by_id(
+	struct prof_server *ps,
+	JNIEnv *jni_env,
+	struct ps_msg *msg
+) {
+	uint64_t instrument_id =
+		msg->body.usr_rq_deinstrument_by_id.instrument_id;
+	struct user_if_client *client =
+		msg->body.usr_rq_deinstrument_by_id.client;
+	const struct mi_entry *entry;
+	struct class_info *ci;
+	unsigned char *new_bc = NULL;
+	size_t new_bc_len;
+	enum deinstrument_resp_status resp_status = DEINSTRUMENT_RP_OK;
+	int profiler_id = -1;
+	uint64_t ignored_id;
+
+	free(msg);
+
+	entry = mi_find(ps->master_instruments, instrument_id);
+	if (entry == NULL || entry->type != MI_METHOD) {
+		resp_status = DEINSTRUMENT_RP_FAIL;
+		goto respond;
+	}
+
+	if (entry->method.deferred) {
+		int idx = queued_instr_list_find_by_instrument_id(
+			&ps->queued_instruments, instrument_id
+		);
+		if (idx >= 0) {
+			queued_instr_list_remove_and_destroy(
+				&ps->queued_instruments, idx
+			);
+		}
+		mi_remove(ps->master_instruments, instrument_id);
+		goto respond;
+	}
+
+	ci = ci_list_find_by_name(
+		&ps->loaded_classes, (char *)entry->entry_class_name->str
+	);
+	if (ci == NULL) {
+		LOG_WARN(
+			"deinstrument-by-id: class not found: %s",
+			(char *)entry->entry_class_name->str
+		);
+		resp_status = DEINSTRUMENT_RP_FAIL;
+		goto respond;
+	}
+
+	profiler_id = ci_remove_instrumented_by_sig(
+		ci, (char *)entry->method.method_name->str, &ignored_id
+	);
+	if (profiler_id == -1) {
+		LOG_WARN(
+			"deinstrument-by-id: not in instrumented list: %s %s",
+			(char *)entry->entry_class_name->str,
+			(char *)entry->method.method_name->str
+		);
+		resp_status = DEINSTRUMENT_RP_FAIL;
+		goto respond;
+	}
+
+	if (ci->instrumented.len > 0) {
+		new_bc = do_method_instrumentation(jni_env, ci, &new_bc_len);
+		if (new_bc == NULL) {
+			resp_status = DEINSTRUMENT_RP_FAIL;
+			goto cleanup_profiler;
+		}
+		if (retransform_pending(
+			ps, jni_env,
+			(char *)entry->entry_class_name->str,
+			NULL, new_bc, new_bc_len, -1
+		) != 0) {
+			LOG_ERROR("deinstrument-by-id retransform failed");
+			resp_status = DEINSTRUMENT_RP_FAIL;
+		}
+	} else {
+		if (retransform_pending(
+			ps, jni_env,
+			(char *)entry->entry_class_name->str,
+			NULL, ci->bytecode, ci->bytecode_len, -1
+		) != 0) {
+			LOG_ERROR("deinstrument-by-id retransform failed");
+			resp_status = DEINSTRUMENT_RP_FAIL;
+		}
+	}
+
+cleanup_profiler:
+	mi_remove(ps->master_instruments, instrument_id);
+	if (jni_remove_profiler(jni_env, profiler_id) != 0) {
+		LOG_ERROR("jni_remove_profiler failed");
+	}
+
+respond:
+	free(new_bc);
+	uif_respond_deinstrument_by_id(ps->uif, client, resp_status);
+	uif_client_release(client);
+}
+
 static void handle_usr_rq_get_async_errors(
 	struct prof_server *ps,
 	struct ps_msg *msg
@@ -669,6 +769,9 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 		break;
 	case USR_RQ_GET_ASYNC_ERRORS:
 		handle_usr_rq_get_async_errors(ps, msg);
+		break;
+	case USR_RQ_DEINSTRUMENT_BY_ID:
+		handle_usr_rq_deinstrument_by_id(ps, jni_env, msg);
 		break;
 	case PS_SHUTDOWN:
 		free(msg);

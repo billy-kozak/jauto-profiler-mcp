@@ -59,5 +59,8 @@ void queued_instr_list_deep_destroy(
 int queued_instr_list_find_by_class(
 	const struct queued_instr_list *arr, const char *class_name
 );
+int queued_instr_list_find_by_instrument_id(
+	const struct queued_instr_list *arr, uint64_t instrument_id
+);
 
 #endif /* _QUEUED_INSTR_H */

@@ -19,6 +19,7 @@
 #define _PROF_SERVER_MSG_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 struct user_if_client;
 
@@ -35,6 +36,7 @@ enum ps_msg_type {
 	USR_RQ_PAUSE_THREADS,
 	USR_RQ_LIST_INSTRUMENTED,
 	USR_RQ_GET_ASYNC_ERRORS,
+	USR_RQ_DEINSTRUMENT_BY_ID,
 };
 
 #define PSM_SHUTDOWN_REQUEST_MSG_MAX 256
@@ -91,6 +93,11 @@ struct psm_usr_rq_get_async_errors {
 	struct user_if_client *client;
 };
 
+struct psm_usr_rq_deinstrument_by_id {
+	struct user_if_client *client;
+	uint64_t instrument_id;
+};
+
 struct ps_msg {
 	enum ps_msg_type type;
 	union {
@@ -105,6 +112,7 @@ struct ps_msg {
 		struct psm_usr_rq_pause_threads usr_rq_pause_threads;
 		struct psm_usr_rq_list_instrumented usr_rq_list_instrumented;
 		struct psm_usr_rq_get_async_errors usr_rq_get_async_errors;
+		struct psm_usr_rq_deinstrument_by_id usr_rq_deinstrument_by_id;
 	} body;
 };
 

@@ -156,6 +156,18 @@ static int handle_instrument_method(
 	return ret;
 }
 
+static int handle_deinstrument_by_id(
+	struct prof_server *ps,
+	struct user_if_client *client,
+	struct user_msg *msg
+) {
+	if (msg->size < sizeof(struct user_msg_deinstr_by_id_req)) {
+		return -1;
+	}
+	uint64_t instrument_id = msg->body.deinstr_by_id_req.instrument_id;
+	return ps_send_usr_rq_deinstrument_by_id(ps, client, instrument_id);
+}
+
 int ps_uif_handler(
 	void *data, struct user_msg *msg, struct user_if_client *client
 ) {
@@ -182,6 +194,8 @@ int ps_uif_handler(
 		return ps_send_usr_rq_list_instrumented(ps, client);
 	case REQUEST_GET_ASYNC_ERRORS:
 		return ps_send_usr_rq_get_async_errors(ps, client);
+	case REQUEST_DEINSTRUMENT_BY_ID:
+		return handle_deinstrument_by_id(ps, client, msg);
 	default:
 		return -1;
 	}

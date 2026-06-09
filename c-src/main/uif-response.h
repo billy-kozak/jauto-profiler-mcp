@@ -83,4 +83,10 @@ int uif_respond_get_async_errors(
 	const struct prof_err_log *log
 );
 
+int uif_respond_deinstrument_by_id(
+	struct user_if *uif,
+	struct user_if_client *client,
+	enum deinstrument_resp_status status
+);
+
 #endif /* _UIF_RESPONSE_H */

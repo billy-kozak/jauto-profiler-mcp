@@ -57,6 +57,10 @@ def cmd_deinstrument_method(client, args):
     client.deinstrument_method(args.class_name, args.method_sig)
 
 
+def cmd_deinstrument_by_id(client, args):
+    client.deinstrument_by_id(args.instrument_id)
+
+
 def cmd_shutdown(client, args):
     client.shutdown()
 
@@ -140,6 +144,12 @@ def main():
     p.add_argument('class_name', metavar='class')
     p.add_argument('method_sig', metavar='method')
 
+    p = sub.add_parser(
+        'deinstrument-by-id',
+        help='remove instrumentation using an instrument ID'
+    )
+    p.add_argument('instrument_id', metavar='id', type=int)
+
     sub.add_parser('shutdown', help='request the profiled JVM to shut down')
 
     p = sub.add_parser('dump-stats', help='dump profiling stats as JSON')
@@ -185,6 +195,7 @@ def main():
         'get-methods':        ClientCmd(client, cmd_get_methods),
         'instrument-method':  ClientCmd(client, cmd_instrument_method),
         'deinstrument-method': ClientCmd(client, cmd_deinstrument_method),
+        'deinstrument-by-id':  ClientCmd(client, cmd_deinstrument_by_id),
         'dump-stats':         ClientCmd(client, cmd_dump_stats),
         'stat-summary':       ClientCmd(client, cmd_stat_summary),
         'shutdown':           ClientCmd(client, cmd_shutdown),

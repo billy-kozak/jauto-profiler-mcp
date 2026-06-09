@@ -53,6 +53,8 @@ enum user_msg_type {
 	RESPONSE_LIST_INSTRUMENTED = 16,
 	REQUEST_GET_ASYNC_ERRORS = 17,
 	RESPONSE_GET_ASYNC_ERRORS = 18,
+	REQUEST_DEINSTRUMENT_BY_ID = 19,
+	RESPONSE_DEINSTRUMENT_BY_ID = 20,
 };
 
 enum instrument_resp_status {
@@ -108,6 +110,10 @@ struct user_msg_deinstr_resp {
 	uint32_t status;
 };
 
+struct user_msg_deinstr_by_id_req {
+	uint64_t instrument_id;
+};
+
 struct user_msg_resume_resp {
 	uint32_t status;
 };
@@ -141,6 +147,7 @@ struct PACKED user_msg {
 		uint8_t raw[A_FLEX];
 		struct user_msg_instr_resp instr_rep;
 		struct user_msg_deinstr_resp deinstr_resp;
+		struct user_msg_deinstr_by_id_req deinstr_by_id_req;
 		struct user_msg_resume_resp resume_resp;
 		struct user_msg_pause_threads_resp pause_threads_resp;
 		struct user_msg_err_resp err_list_resp;
