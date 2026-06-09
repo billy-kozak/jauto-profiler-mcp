@@ -84,6 +84,11 @@ const struct mi_entry *mi_find(
 	const struct master_instruments *mi, uint64_t id
 );
 
+struct mi_itr_result mi_find_method_by_name(
+	const struct master_instruments *mi,
+	const char *class_name,
+	const char *method_sig
+);
 
 void mi_itr_init(const struct master_instruments *mi, struct mi_itr *itr);
 struct mi_itr_result mi_iterate(

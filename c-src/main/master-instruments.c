@@ -24,6 +24,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <assert.h>
 
 struct master_instruments {
@@ -181,6 +182,31 @@ int mi_mark_line_exit_applied(struct master_instruments *mi, uint64_t id)
 	}
 	e->line.exit_deferred = false;
 	return 0;
+}
+
+struct mi_itr_result mi_find_method_by_name(
+	const struct master_instruments *mi,
+	const char *class_name,
+	const char *method_sig
+) {
+	struct mi_itr itr;
+	struct mi_itr_result r;
+
+	mi_itr_init(mi, &itr);
+	while ((r = mi_iterate(mi, &itr)).entry != NULL) {
+		if (r.entry->type != MI_METHOD) {
+			continue;
+		}
+		if (
+			strcmp((char *)r.entry->entry_class_name->str,
+				class_name) == 0 &&
+			strcmp((char *)r.entry->method.method_name->str,
+				method_sig) == 0
+		) {
+			return r;
+		}
+	}
+	return (struct mi_itr_result){0, NULL};
 }
 
 void mi_itr_init(const struct master_instruments *mi, struct mi_itr *itr)

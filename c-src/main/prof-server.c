@@ -456,15 +456,40 @@ static void handle_usr_rq_deinstrument_method(
 	struct user_if_client *client =
 		msg->body.usr_rq_deinstrument_method.client;
 
-	struct class_info *ci = ci_list_find_by_name(
-		&ps->loaded_classes, class_name
-	);
 	unsigned char *new_bc = NULL;
 	size_t new_bc_len;
 	enum deinstrument_resp_status resp_status = DEINSTRUMENT_RP_OK;
-	uint64_t instrument_id = 0;
+	struct class_info *ci;
 	int profiler_id;
+	uint64_t ignored_id;
 
+	struct mi_itr_result found = mi_find_method_by_name(
+		ps->master_instruments, class_name, method_sig
+	);
+	if (found.entry == NULL) {
+		LOG_WARN(
+			"deinstrument: %s not found in %s", method_sig, class_name
+		);
+		resp_status = DEINSTRUMENT_RP_FAIL;
+		goto respond;
+	}
+	uint64_t instrument_id = found.id;
+	const struct mi_entry *entry = found.entry;
+
+	if (entry->method.deferred) {
+		int idx = queued_instr_list_find_by_instrument_id(
+			&ps->queued_instruments, instrument_id
+		);
+		if (idx >= 0) {
+			queued_instr_list_remove_and_destroy(
+				&ps->queued_instruments, idx
+			);
+		}
+		mi_remove(ps->master_instruments, instrument_id);
+		goto respond;
+	}
+
+	ci = ci_list_find_by_name(&ps->loaded_classes, class_name);
 	if (ci == NULL) {
 		LOG_WARN("deinstrument: class not found: %s", class_name);
 		resp_status = DEINSTRUMENT_RP_FAIL;
@@ -472,7 +497,7 @@ static void handle_usr_rq_deinstrument_method(
 	}
 
 	profiler_id = ci_remove_instrumented_by_sig(
-		ci, method_sig, &instrument_id
+		ci, method_sig, &ignored_id
 	);
 	if (profiler_id == -1) {
 		LOG_WARN(
