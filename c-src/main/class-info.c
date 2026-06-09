@@ -135,7 +135,9 @@ fail:
 }
 
 int ci_remove_instrumented_by_sig(
-	struct class_info *ci, const char *method_sig
+	struct class_info *ci,
+	const char *method_sig,
+	uint64_t *instrument_id_out
 ) {
 	struct instrumented_method_list *list = &ci->instrumented;
 	size_t i;
@@ -143,6 +145,7 @@ int ci_remove_instrumented_by_sig(
 	for (i = 0; i < list->len; i++) {
 		if (strcmp((char *)list->arr[i].method_sig->str, method_sig) == 0) {
 			int id = list->arr[i].profiler_id;
+			*instrument_id_out = list->arr[i].instrument_id;
 			instrumented_method_list_remove_and_destroy(list, (int)i);
 			return id;
 		}

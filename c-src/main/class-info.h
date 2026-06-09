@@ -83,7 +83,9 @@ struct class_info *ci_alloc(
 );
 void ci_free(struct class_info *ci);
 int ci_remove_instrumented_by_sig(
-	struct class_info *ci, const char *method_sig
+	struct class_info *ci,
+	const char *method_sig,
+	uint64_t *instrument_id_out
 );
 struct instrumented_line *ci_add_instrumented_line(
 	struct class_info *ci,

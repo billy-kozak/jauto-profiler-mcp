@@ -167,7 +167,8 @@ static int retransform_pending(
 static enum instrument_resp_status instrument_later(
 	struct prof_server *ps,
 	const char *class_name,
-	const char *method_sig
+	const char *method_sig,
+	uint64_t instrument_id
 ) {
 	struct queued_instr *qi = queued_instr_method_add(
 		&ps->queued_instruments, class_name, method_sig
@@ -182,8 +183,10 @@ static enum instrument_resp_status instrument_later(
 				(int)(ps->queued_instruments.len - 1)
 			);
 		}
+		mi_remove(ps->master_instruments, instrument_id);
 		return INSTRUMENT_RP_ERROR;
 	}
+	qi->instrument_id = instrument_id;
 	return INSTRUMENT_RP_DEFERRED;
 }
 
@@ -191,7 +194,8 @@ static enum instrument_resp_status instrument_now(
 	struct prof_server *ps,
 	JNIEnv *jni_env,
 	struct class_info *ci,
-	const char *method_sig
+	const char *method_sig,
+	uint64_t instrument_id
 ) {
 	struct instrumented_method *im = NULL;
 	unsigned char *new_bc = NULL;
@@ -201,11 +205,12 @@ static enum instrument_resp_status instrument_now(
 
 	id = jni_create_profiler(jni_env, (char *)ci->name->str, method_sig);
 	if (id == -1) {
-		return INSTRUMENT_RP_DOUBLE_INSTRUMENT;
+		status = INSTRUMENT_RP_DOUBLE_INSTRUMENT;
+		goto fail_cleanup_mi;
 	}
 	if (id < 0) {
 		LOG_ERROR("jni_create_profiler failed");
-		return INSTRUMENT_RP_ERROR;
+		goto fail_cleanup_mi;
 	}
 
 	im = instrumented_method_list_add_and_init(
@@ -217,6 +222,8 @@ static enum instrument_resp_status instrument_now(
 		}
 		goto fail_cleanup_profiler;
 	}
+
+	im->instrument_id = instrument_id;
 
 	new_bc = do_method_instrumentation(jni_env, ci, &new_bc_len);
 	if (new_bc == NULL) {
@@ -236,8 +243,11 @@ static enum instrument_resp_status instrument_now(
 		goto fail_cleanup_instrumented;
 	}
 
+	mi_mark_method_applied(ps->master_instruments, instrument_id);
 	status = INSTRUMENT_RP_OK;
-	goto done;
+
+	free(new_bc);
+	return status;
 
 fail_cleanup_instrumented:
 	instrumented_method_list_remove_and_destroy(
@@ -245,7 +255,9 @@ fail_cleanup_instrumented:
 	);
 fail_cleanup_profiler:
 	jni_remove_profiler(jni_env, id);
-done:
+fail_cleanup_mi:
+	mi_remove(ps->master_instruments, instrument_id);
+
 	free(new_bc);
 	return status;
 }
@@ -258,7 +270,7 @@ static void do_deferred_method_instrumentation(
 ) {
 	const char *method_sig = (char *)qi->method_sig->str;
 	enum instrument_resp_status status = instrument_now(
-		ps, jni_env, ci, method_sig
+		ps, jni_env, ci, method_sig, qi->instrument_id
 	);
 	if (status != INSTRUMENT_RP_OK) {
 		LOG_WARN(
@@ -341,14 +353,28 @@ static void handle_usr_rq_instrument_method(
 	const char *method_sig = msg->body.usr_rq_instrument_method.method_sig;
 	struct class_info *ci;
 	enum instrument_resp_status status;
+	uint64_t instrument_id;
+
+	instrument_id = mi_add_method(
+		ps->master_instruments, class_name, class_name, method_sig
+	);
+	if (instrument_id == 0) {
+		status = INSTRUMENT_RP_ERROR;
+		goto respond;
+	}
 
 	ci = ci_list_find_by_name(&ps->loaded_classes, class_name);
 	if (ci == NULL) {
-		status = instrument_later(ps, class_name, method_sig);
+		status = instrument_later(
+			ps, class_name, method_sig, instrument_id
+		);
 	} else {
-		status = instrument_now(ps, jni_env, ci, method_sig);
+		status = instrument_now(
+			ps, jni_env, ci, method_sig, instrument_id
+		);
 	}
 
+respond:
 	uif_respond_instrument(ps->uif, client, status);
 	ps_usr_rq_instrument_method_dealloc(msg);
 }
@@ -430,6 +456,7 @@ static void handle_usr_rq_deinstrument_method(
 	unsigned char *new_bc = NULL;
 	size_t new_bc_len;
 	enum deinstrument_resp_status resp_status = DEINSTRUMENT_RP_OK;
+	uint64_t instrument_id = 0;
 	int profiler_id;
 
 	if (ci == NULL) {
@@ -438,7 +465,9 @@ static void handle_usr_rq_deinstrument_method(
 		goto respond;
 	}
 
-	profiler_id = ci_remove_instrumented_by_sig(ci, method_sig);
+	profiler_id = ci_remove_instrumented_by_sig(
+		ci, method_sig, &instrument_id
+	);
 	if (profiler_id == -1) {
 		LOG_WARN(
 			"deinstrument: %s not instrumented in %s",
@@ -471,6 +500,7 @@ static void handle_usr_rq_deinstrument_method(
 	}
 
 cleanup_profiler:
+	mi_remove(ps->master_instruments, instrument_id);
 	if (jni_remove_profiler(jni_env, profiler_id) != 0) {
 		LOG_ERROR("jni_remove_profiler failed");
 	}
