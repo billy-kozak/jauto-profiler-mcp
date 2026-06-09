@@ -109,7 +109,9 @@ static struct hash_tab_kv ent_unlink(
 
 	if(tab->head == ent) {
 		tab->head = ent->next;
-		tab->head->prev = NULL;
+		if(tab->head != NULL) {
+			tab->head->prev = NULL;
+		}
 	} else {
 		assert(ent->prev != NULL);
 		ent->prev->next = ent->next;

@@ -164,10 +164,30 @@ TEST_CASE(dup_add_test)
 	return 0;
 }
 
+TEST_CASE(remove_only_entry_test)
+{
+	unsigned char k[] = "Only Key";
+	uintptr_t v = 42;
+
+	struct hash_tab *tab = hash_tab_init(NULL);
+
+	TEST_ASSERT(hash_tab_add(tab, k, sizeof(k), (void*)v).err == 0);
+	TEST_ASSERT(hash_tab_size(tab) == 1);
+
+	uintptr_t got = (uintptr_t)hash_tab_remove(tab, k, sizeof(k));
+	TEST_ASSERT(got == v);
+	TEST_ASSERT(hash_tab_size(tab) == 0);
+	TEST_ASSERT(hash_tab_lookup(tab, k, sizeof(k)) == NULL);
+
+	hash_tab_destroy(tab, NULL);
+	return 0;
+}
+
 TEST_SUITE(
 	hash_tab_suite,
 	basic_lookup_test,
 	rehash_test,
 	add_rm_itr_test,
-	dup_add_test
+	dup_add_test,
+	remove_only_entry_test
 )
