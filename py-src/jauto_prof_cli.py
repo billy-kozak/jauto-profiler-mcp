@@ -49,7 +49,8 @@ def cmd_get_methods(client, args):
 
 
 def cmd_instrument_method(client, args):
-    print(client.instrument_method(args.class_name, args.method_sig))
+    result = client.instrument_method(args.class_name, args.method_sig)
+    print(f"{result['status']} instrument_id={result['instrument_id']}")
 
 
 def cmd_deinstrument_method(client, args):

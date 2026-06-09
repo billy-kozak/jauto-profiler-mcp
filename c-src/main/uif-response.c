@@ -141,9 +141,10 @@ int uif_respond_class_methods(
 int uif_respond_instrument(
 	struct user_if *uif,
 	struct user_if_client *client,
-	enum instrument_resp_status status
+	enum instrument_resp_status status,
+	uint64_t instrument_id
 ) {
-	struct user_msg_instr_resp body = {(uint32_t)status};
+	struct user_msg_instr_resp body = {(uint32_t)status, instrument_id};
 
 	return uif_send_short_response(
 		uif, client, RESPONSE_INSTRUMENT_METHOD, &body, sizeof(body)

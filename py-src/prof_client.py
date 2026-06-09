@@ -263,7 +263,7 @@ class ProfClient:
 
         return self._parse_string_list(resp.raw_body)
 
-    def instrument_method(self, class_name: str, method_sig: str) -> str:
+    def instrument_method(self, class_name: str, method_sig: str) -> dict:
 
         body = pstring.pack(class_name) + pstring.pack(method_sig)
 
@@ -275,18 +275,18 @@ class ProfClient:
         if resp.message_type != _MSG_TYPE_RESPONSE_INSTRUMENT_METHOD:
             raise ValueError("Unexpected response")
 
-        (status,) = struct.unpack("<I", resp.raw_body)
+        status, instrument_id = struct.unpack("<IQ", resp.raw_body)
 
         if status == 1:
             raise RuntimeError("method is already instrumented")
 
         if status == 3:
-            return "deferred"
+            return {"status": "deferred", "instrument_id": instrument_id}
 
         if status != 0:
             raise RuntimeError("instrument_method failed")
 
-        return "ok"
+        return {"status": "ok", "instrument_id": instrument_id}
 
     def deinstrument_method(self, class_name: str, method_sig: str) -> None:
 

@@ -97,8 +97,9 @@ struct user_msg_instr_list_entry {
 };
 
 
-struct user_msg_instr_resp {
+struct PACKED user_msg_instr_resp {
 	uint32_t status;
+	uint64_t instrument_id;
 };
 
 struct user_msg_deinstr_resp {

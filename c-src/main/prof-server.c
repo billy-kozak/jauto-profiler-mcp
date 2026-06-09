@@ -373,9 +373,15 @@ static void handle_usr_rq_instrument_method(
 			ps, jni_env, ci, method_sig, instrument_id
 		);
 	}
+	bool status_ok = (
+		status == INSTRUMENT_RP_OK || status == INSTRUMENT_RP_DEFERRED
+	);
+	if (!status_ok) {
+		instrument_id = 0;
+	}
 
 respond:
-	uif_respond_instrument(ps->uif, client, status);
+	uif_respond_instrument(ps->uif, client, status, instrument_id);
 	ps_usr_rq_instrument_method_dealloc(msg);
 }
 

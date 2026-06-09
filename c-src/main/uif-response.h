@@ -42,7 +42,8 @@ int uif_respond_class_methods(
 int uif_respond_instrument(
 	struct user_if *uif,
 	struct user_if_client *client,
-	enum instrument_resp_status status
+	enum instrument_resp_status status,
+	uint64_t instrument_id
 );
 
 int uif_respond_get_stats(

@@ -63,7 +63,7 @@ def get_class_methods(class_name: str) -> list[str]:
 
 
 @mcp.tool()
-def instrument_method(class_name: str, method_sig: str) -> str:
+def instrument_method(class_name: str, method_sig: str) -> dict:
     """Instrument a method so that entry/exit times and call counts are recorded.
 
     class_name: JVM internal class name (e.g. "org/example/MyClass$Inner")
