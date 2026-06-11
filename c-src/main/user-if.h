@@ -55,6 +55,8 @@ enum user_msg_type {
 	RESPONSE_GET_ASYNC_ERRORS = 18,
 	REQUEST_DEINSTRUMENT_BY_ID = 19,
 	RESPONSE_DEINSTRUMENT_BY_ID = 20,
+	REQUEST_INSTRUMENT_LINE = 21,
+	RESPONSE_INSTRUMENT_LINE = 22,
 };
 
 enum instrument_resp_status {
@@ -62,6 +64,11 @@ enum instrument_resp_status {
 	INSTRUMENT_RP_DOUBLE_INSTRUMENT = 1,
 	INSTRUMENT_RP_ERROR = 2,
 	INSTRUMENT_RP_DEFERRED = 3,
+};
+
+enum instrument_line_resp_status {
+	INSTRUMENT_LINE_RP_OK    = 0,
+	INSTRUMENT_LINE_RP_ERROR = 1,
 };
 
 enum deinstrument_resp_status {
@@ -114,6 +121,18 @@ struct user_msg_deinstr_by_id_req {
 	uint64_t instrument_id;
 };
 
+/*
+ * Body of REQUEST_INSTRUMENT_LINE:
+ *   struct user_msg_instr_line_req (fixed header)
+ *   pstring entry_class_name
+ *   pstring exit_class_name
+ */
+struct PACKED user_msg_instr_line_req {
+	uint32_t entry_line;
+	uint32_t exit_line;
+	struct pstring cls[A_FLEX];
+};
+
 struct user_msg_resume_resp {
 	uint32_t status;
 };
@@ -148,6 +167,7 @@ struct PACKED user_msg {
 		struct user_msg_instr_resp instr_rep;
 		struct user_msg_deinstr_resp deinstr_resp;
 		struct user_msg_deinstr_by_id_req deinstr_by_id_req;
+		struct user_msg_instr_line_req instr_line_req;
 		struct user_msg_resume_resp resume_resp;
 		struct user_msg_pause_threads_resp pause_threads_resp;
 		struct user_msg_err_resp err_list_resp;

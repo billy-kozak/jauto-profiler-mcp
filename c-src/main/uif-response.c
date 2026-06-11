@@ -279,6 +279,19 @@ int uif_respond_deinstrument_by_id(
 	);
 }
 
+int uif_respond_instrument_line(
+	struct user_if *uif,
+	struct user_if_client *client,
+	enum instrument_line_resp_status status,
+	uint64_t instrument_id
+) {
+	struct user_msg_instr_resp body = {(uint32_t)status, instrument_id};
+
+	return uif_send_short_response(
+		uif, client, RESPONSE_INSTRUMENT_LINE, &body, sizeof(body)
+	);
+}
+
 int uif_respond_get_async_errors(
 	struct user_if *uif,
 	struct user_if_client *client,

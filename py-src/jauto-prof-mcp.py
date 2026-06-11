@@ -87,6 +87,34 @@ def instrument_method(class_name: str, method_sig: str) -> dict:
 
 
 @mcp.tool()
+def instrument_line(
+    entry_class: str,
+    entry_line: int,
+    exit_line: int,
+    exit_class: str | None = None,
+) -> dict:
+    """Instrument a line range so that entry/exit times and call counts are recorded.
+
+    entry_class: JVM internal class name where the entry line resides
+                 (e.g. "org/example/MyClass")
+    entry_line:  source line number at the entry point of the region to profile
+    exit_line:   source line number at the exit point of the region to profile
+    exit_class:  JVM internal class name where the exit line resides; defaults
+                 to entry_class when omitted
+
+    Returns a dict with:
+      status        - "ok" if instrumentation was applied
+      instrument_id - integer ID that can be passed to deinstrument_by_id
+
+    Raises on failure.
+    """
+    resolved_exit_class = exit_class if exit_class is not None else entry_class
+    return ProfClient().instrument_line(
+        entry_class, resolved_exit_class, entry_line, exit_line
+    )
+
+
+@mcp.tool()
 def get_async_errors() -> list[dict]:
     """Return all errors from the profiler's asynchronous error log.
 

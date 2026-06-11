@@ -21,6 +21,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "util/pstring.h"
+
 struct prof_server;
 struct ps_msg;
 struct user_if_client;
@@ -104,6 +106,23 @@ int ps_send_usr_rq_deinstrument_by_id(
 	struct prof_server *ps,
 	struct user_if_client *client,
 	uint64_t instrument_id
+);
+
+struct ps_msg *ps_usr_rq_instrument_line_alloc(
+	struct user_if_client *client,
+	const struct pstring *entry_class,
+	const struct pstring *exit_class,
+	uint32_t entry_line,
+	uint32_t exit_line
+);
+void ps_usr_rq_instrument_line_dealloc(struct ps_msg *msg);
+int ps_send_usr_rq_instrument_line(
+	struct prof_server *ps,
+	struct user_if_client *client,
+	const struct pstring *entry_class,
+	const struct pstring *exit_class,
+	uint32_t entry_line,
+	uint32_t exit_line
 );
 
 #endif /* _PROF_SERVER_EV_H */

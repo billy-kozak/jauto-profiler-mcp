@@ -46,6 +46,8 @@ _MSG_TYPE_REQUEST_GET_ASYNC_ERRORS     = 17
 _MSG_TYPE_RESPONSE_GET_ASYNC_ERRORS    = 18
 _MSG_TYPE_REQUEST_DEINSTRUMENT_BY_ID   = 19
 _MSG_TYPE_RESPONSE_DEINSTRUMENT_BY_ID  = 20
+_MSG_TYPE_REQUEST_INSTRUMENT_LINE      = 21
+_MSG_TYPE_RESPONSE_INSTRUMENT_LINE     = 22
 
 _LISTED_INSTR_ACTIVE   = 0
 _LISTED_INSTR_DEFERRED = 1
@@ -427,6 +429,35 @@ class ProfClient:
             })
 
         return result
+
+    def instrument_line(
+        self,
+        entry_class: str,
+        exit_class: str,
+        entry_line: int,
+        exit_line: int,
+    ) -> dict:
+
+        body = (
+            struct.pack("<II", entry_line, exit_line)
+            + pstring.pack(entry_class)
+            + pstring.pack(exit_class)
+        )
+
+        resp = self._send_request(
+            _MSG_TYPE_REQUEST_INSTRUMENT_LINE,
+            body
+        )
+
+        if resp.message_type != _MSG_TYPE_RESPONSE_INSTRUMENT_LINE:
+            raise ValueError("Unexpected response")
+
+        status, instrument_id = struct.unpack("<IQ", resp.raw_body)
+
+        if status != 0:
+            raise RuntimeError("instrument_line failed")
+
+        return {"status": "ok", "instrument_id": instrument_id}
 
     def deinstrument_by_id(self, instrument_id: int) -> None:
 

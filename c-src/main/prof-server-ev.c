@@ -453,6 +453,77 @@ int ps_send_usr_rq_deinstrument_by_id(
 	return 0;
 }
 
+struct ps_msg *ps_usr_rq_instrument_line_alloc(
+	struct user_if_client *client,
+	const struct pstring *entry_class,
+	const struct pstring *exit_class,
+	uint32_t entry_line,
+	uint32_t exit_line
+) {
+	struct pstring *entry_class_copy;
+	struct pstring *exit_class_copy;
+	struct ps_msg *msg;
+
+	entry_class_copy = pstring_dup(entry_class);
+	if (entry_class_copy == NULL) {
+		return NULL;
+	}
+
+	exit_class_copy = pstring_dup(exit_class);
+	if (exit_class_copy == NULL) {
+		free(entry_class_copy);
+		return NULL;
+	}
+
+	msg = malloc(sizeof(*msg));
+	if (msg == NULL) {
+		free(entry_class_copy);
+		free(exit_class_copy);
+		return NULL;
+	}
+
+	uif_client_acquire(client);
+	msg->type = USR_RQ_INSTRUMENT_LINE;
+	msg->body.usr_rq_instrument_line.client = client;
+	msg->body.usr_rq_instrument_line.entry_class = entry_class_copy;
+	msg->body.usr_rq_instrument_line.exit_class = exit_class_copy;
+	msg->body.usr_rq_instrument_line.entry_line = entry_line;
+	msg->body.usr_rq_instrument_line.exit_line = exit_line;
+	return msg;
+}
+
+void ps_usr_rq_instrument_line_dealloc(struct ps_msg *msg)
+{
+	uif_client_release(msg->body.usr_rq_instrument_line.client);
+	free(msg->body.usr_rq_instrument_line.entry_class);
+	free(msg->body.usr_rq_instrument_line.exit_class);
+	free(msg);
+}
+
+int ps_send_usr_rq_instrument_line(
+	struct prof_server *ps,
+	struct user_if_client *client,
+	const struct pstring *entry_class,
+	const struct pstring *exit_class,
+	uint32_t entry_line,
+	uint32_t exit_line
+) {
+	struct ps_msg *msg = ps_usr_rq_instrument_line_alloc(
+		client, entry_class, exit_class, entry_line, exit_line
+	);
+
+	if (msg == NULL) {
+		return -1;
+	}
+
+	if (ps_send_ev(ps, msg, sizeof(*msg)) != 0) {
+		ps_usr_rq_instrument_line_dealloc(msg);
+		return -1;
+	}
+
+	return 0;
+}
+
 int ps_send_usr_rq_resume(
 	struct prof_server *ps, struct user_if_client *client
 ) {

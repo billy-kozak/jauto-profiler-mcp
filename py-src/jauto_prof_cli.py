@@ -53,6 +53,14 @@ def cmd_instrument_method(client, args):
     print(f"{result['status']} instrument_id={result['instrument_id']}")
 
 
+def cmd_instrument_line(client, args):
+    exit_class = args.exit_class if args.exit_class else args.entry_class
+    result = client.instrument_line(
+        args.entry_class, exit_class, args.entry_line, args.exit_line
+    )
+    print(f"{result['status']} instrument_id={result['instrument_id']}")
+
+
 def cmd_deinstrument_method(client, args):
     client.deinstrument_method(args.class_name, args.method_sig)
 
@@ -139,6 +147,18 @@ def main():
     p.add_argument('method_sig', metavar='method')
 
     p = sub.add_parser(
+        'instrument-line',
+        help='instrument a line range for profiling'
+    )
+    p.add_argument('entry_class', metavar='entry-class')
+    p.add_argument('entry_line', metavar='entry-line', type=int)
+    p.add_argument('exit_line', metavar='exit-line', type=int)
+    p.add_argument(
+        '--exit-class', metavar='class',
+        help='exit class name (default: same as entry-class)',
+    )
+
+    p = sub.add_parser(
         'deinstrument-method', help='remove instrumentation from a method'
     )
     p.add_argument('class_name', metavar='class')
@@ -194,6 +214,7 @@ def main():
         'list-classes':       ClientCmd(client, cmd_list_classes),
         'get-methods':        ClientCmd(client, cmd_get_methods),
         'instrument-method':  ClientCmd(client, cmd_instrument_method),
+        'instrument-line':    ClientCmd(client, cmd_instrument_line),
         'deinstrument-method': ClientCmd(client, cmd_deinstrument_method),
         'deinstrument-by-id':  ClientCmd(client, cmd_deinstrument_by_id),
         'dump-stats':         ClientCmd(client, cmd_dump_stats),

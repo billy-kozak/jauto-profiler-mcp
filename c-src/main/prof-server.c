@@ -697,6 +697,19 @@ static void handle_usr_rq_pause_threads(
 }
 
 
+static void handle_usr_rq_instrument_line(
+	struct prof_server *ps,
+	struct ps_msg *msg
+) {
+	struct user_if_client *client =
+		msg->body.usr_rq_instrument_line.client;
+
+	uif_respond_instrument_line(
+		ps->uif, client, INSTRUMENT_LINE_RP_ERROR, 0
+	);
+	ps_usr_rq_instrument_line_dealloc(msg);
+}
+
 static void handle_shutdown_request(JNIEnv *jni_env, struct ps_msg *msg)
 {
 	int exit_code = msg->body.shutdown_request.exit_code;
@@ -797,6 +810,9 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 		break;
 	case USR_RQ_DEINSTRUMENT_BY_ID:
 		handle_usr_rq_deinstrument_by_id(ps, jni_env, msg);
+		break;
+	case USR_RQ_INSTRUMENT_LINE:
+		handle_usr_rq_instrument_line(ps, msg);
 		break;
 	case PS_SHUTDOWN:
 		free(msg);

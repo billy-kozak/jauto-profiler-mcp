@@ -25,6 +25,19 @@
 
 #define PSTRING_SPRINTF_INIT_CAP 512
 
+struct pstring *pstring_dup(const struct pstring *ps)
+{
+	struct pstring *copy = malloc(sizeof(*ps) + ps->size + 1);
+
+	if (copy == NULL) {
+		return NULL;
+	}
+	copy->size = ps->size;
+	memcpy(copy->str, ps->str, ps->size);
+	copy->str[ps->size] = '\0';
+	return copy;
+}
+
 struct pstring *pstring_from_cstr(const char *str) {
 	size_t str_len = strlen(str);
 

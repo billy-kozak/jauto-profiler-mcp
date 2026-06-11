@@ -43,6 +43,7 @@ static inline uint8_t *pstring_memcpy_to(
 }
 
 struct pstring *pstring_from_cstr(const char *str);
+struct pstring *pstring_dup(const struct pstring *ps);
 
 struct pstring *pstring_vsprintf(const char *fmt, va_list args);
 struct pstring *pstring_sprintf(const char *fmt, ...)

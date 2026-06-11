@@ -89,4 +89,11 @@ int uif_respond_deinstrument_by_id(
 	enum deinstrument_resp_status status
 );
 
+int uif_respond_instrument_line(
+	struct user_if *uif,
+	struct user_if_client *client,
+	enum instrument_line_resp_status status,
+	uint64_t instrument_id
+);
+
 #endif /* _UIF_RESPONSE_H */

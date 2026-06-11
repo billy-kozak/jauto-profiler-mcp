@@ -19,6 +19,7 @@
 #include "ps-uif-handler.h"
 #include "prof-server-ev.h"
 
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -156,6 +157,49 @@ static int handle_instrument_method(
 	return ret;
 }
 
+static int handle_instrument_line(
+	struct prof_server *ps,
+	struct user_if_client *client,
+	struct user_msg *msg
+) {
+	struct user_msg_instr_line_req *req = &msg->body.instr_line_req;
+
+	uint32_t size =
+		msg->size -
+		offsetof(struct user_msg, body.instr_line_req.cls);
+
+	if(size < sizeof(struct pstring)) {
+		return -1;
+	}
+
+	uint8_t *raw = (uint8_t*)req->cls;
+	struct pstring *ent_cls = (struct pstring *)raw;
+
+	size_t ent_tot_size = pstring_total_size(ent_cls);
+
+	if(size < ent_tot_size) {
+		return -1;
+	}
+	size -= ent_tot_size;
+	raw += ent_tot_size;
+
+	if(size < sizeof(struct pstring)) {
+		return -1;
+	}
+	struct pstring *exit_cls = (struct pstring*)raw;
+
+	size_t exit_tot_size = pstring_total_size(exit_cls);
+
+	if(size < exit_tot_size) {
+		return -1;
+	}
+
+	return ps_send_usr_rq_instrument_line(
+		ps, client, ent_cls, exit_cls,
+		req->entry_line, req->exit_line
+	);
+}
+
 static int handle_deinstrument_by_id(
 	struct prof_server *ps,
 	struct user_if_client *client,
@@ -196,6 +240,8 @@ int ps_uif_handler(
 		return ps_send_usr_rq_get_async_errors(ps, client);
 	case REQUEST_DEINSTRUMENT_BY_ID:
 		return handle_deinstrument_by_id(ps, client, msg);
+	case REQUEST_INSTRUMENT_LINE:
+		return handle_instrument_line(ps, client, msg);
 	default:
 		return -1;
 	}
