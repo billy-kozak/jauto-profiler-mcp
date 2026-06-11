@@ -454,6 +454,9 @@ class ProfClient:
 
         status, instrument_id = struct.unpack("<IQ", resp.raw_body)
 
+        if status == 2:
+            return {"status": "deferred", "instrument_id": instrument_id}
+
         if status != 0:
             raise RuntimeError("instrument_line failed")
 

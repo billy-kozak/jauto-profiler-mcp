@@ -73,6 +73,13 @@ uint64_t mi_add_line(
 	int entry_line,
 	int exit_line
 );
+uint64_t mi_add_linep(
+	struct master_instruments *mi,
+	const struct pstring *entry_class,
+	const struct pstring *exit_class,
+	int entry_line,
+	int exit_line
+);
 
 void mi_remove(struct master_instruments *mi, uint64_t id);
 

@@ -67,8 +67,9 @@ enum instrument_resp_status {
 };
 
 enum instrument_line_resp_status {
-	INSTRUMENT_LINE_RP_OK    = 0,
-	INSTRUMENT_LINE_RP_ERROR = 1,
+	INSTRUMENT_LINE_RP_OK       = 0,
+	INSTRUMENT_LINE_RP_ERROR    = 1,
+	INSTRUMENT_LINE_RP_DEFERRED = 2,
 };
 
 enum deinstrument_resp_status {

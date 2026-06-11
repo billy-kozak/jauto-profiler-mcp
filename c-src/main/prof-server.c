@@ -562,8 +562,13 @@ static void handle_usr_rq_deinstrument_by_id(
 	free(msg);
 
 	entry = mi_find(ps->master_instruments, instrument_id);
-	if (entry == NULL || entry->type != MI_METHOD) {
+	if (entry == NULL) {
 		resp_status = DEINSTRUMENT_RP_FAIL;
+		goto respond;
+	}
+
+	if (entry->type == MI_LINE) {
+		mi_remove(ps->master_instruments, instrument_id);
 		goto respond;
 	}
 
@@ -703,10 +708,28 @@ static void handle_usr_rq_instrument_line(
 ) {
 	struct user_if_client *client =
 		msg->body.usr_rq_instrument_line.client;
+	const struct pstring *entry_class =
+		msg->body.usr_rq_instrument_line.entry_class;
+	const struct pstring *exit_class =
+		msg->body.usr_rq_instrument_line.exit_class;
+	uint32_t entry_line = msg->body.usr_rq_instrument_line.entry_line;
+	uint32_t exit_line  = msg->body.usr_rq_instrument_line.exit_line;
+	enum instrument_line_resp_status status;
+	uint64_t instrument_id;
 
-	uif_respond_instrument_line(
-		ps->uif, client, INSTRUMENT_LINE_RP_ERROR, 0
+	instrument_id = mi_add_linep(
+		ps->master_instruments,
+		entry_class, exit_class,
+		(int)entry_line, (int)exit_line
 	);
+
+	if (instrument_id == 0) {
+		status = INSTRUMENT_LINE_RP_ERROR;
+	} else {
+		status = INSTRUMENT_LINE_RP_DEFERRED;
+	}
+
+	uif_respond_instrument_line(ps->uif, client, status, instrument_id);
 	ps_usr_rq_instrument_line_dealloc(msg);
 }
 

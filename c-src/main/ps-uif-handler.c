@@ -19,9 +19,13 @@
 #include "ps-uif-handler.h"
 #include "prof-server-ev.h"
 
+#include "util/log.h"
+
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define LOG_TAG "ps-uif-handler"
 
 static const char *const USR_SHUTDOWN_MSG = "User requested shutdown";
 
@@ -163,34 +167,49 @@ static int handle_instrument_line(
 	struct user_msg *msg
 ) {
 	struct user_msg_instr_line_req *req = &msg->body.instr_line_req;
+	size_t cls_off = offsetof(struct user_msg_instr_line_req, cls);
+	size_t size = msg->size;
 
-	uint32_t size =
-		msg->size -
-		offsetof(struct user_msg, body.instr_line_req.cls);
+	if(size < cls_off) {
+		LOG_WARN("instrument-line: msg too short");
+		return -1;
+	}
 
-	if(size < sizeof(struct pstring)) {
+	size -= cls_off;
+	if (size < sizeof(struct pstring)) {
+		LOG_WARN(
+			"instrument-line: msg too short for entry pstring "
+			"header"
+		);
 		return -1;
 	}
 
 	uint8_t *raw = (uint8_t*)req->cls;
 	struct pstring *ent_cls = (struct pstring *)raw;
-
 	size_t ent_tot_size = pstring_total_size(ent_cls);
 
 	if(size < ent_tot_size) {
+		LOG_WARN(
+			"instrument-line: msg too short for exit pstring "
+			"header"
+		);
 		return -1;
 	}
 	size -= ent_tot_size;
-	raw += ent_tot_size;
 
 	if(size < sizeof(struct pstring)) {
+		LOG_WARN("instrument-line: msg too short");
 		return -1;
 	}
-	struct pstring *exit_cls = (struct pstring*)raw;
 
+	raw += ent_tot_size;
+	struct pstring *exit_cls = (struct pstring*)raw;
 	size_t exit_tot_size = pstring_total_size(exit_cls);
 
-	if(size < exit_tot_size) {
+	if (size < exit_tot_size) {
+		LOG_WARN(
+			"instrument-line: msg too short for exit pstring data"
+		);
 		return -1;
 	}
 

@@ -118,6 +118,32 @@ uint64_t mi_add_method(
 	return mi_insert(mi, e);
 }
 
+uint64_t mi_add_linep(
+	struct master_instruments *mi,
+	const struct pstring *entry_class,
+	const struct pstring *exit_class,
+	int entry_line,
+	int exit_line
+) {
+	struct mi_entry *e = malloc(sizeof(*e));
+	if (e == NULL) {
+		return 0;
+	}
+	e->type = MI_LINE;
+	e->entry_class_name      = pstring_dup(entry_class);
+	e->line.exit_class_name  = pstring_dup(exit_class);
+	e->line.entry_line_number = entry_line;
+	e->line.exit_line_number  = exit_line;
+	e->line.entry_deferred = true;
+	e->line.exit_deferred  = true;
+
+	if (e->entry_class_name == NULL || e->line.exit_class_name == NULL) {
+		mi_entry_free(e);
+		return 0;
+	}
+	return mi_insert(mi, e);
+}
+
 uint64_t mi_add_line(
 	struct master_instruments *mi,
 	const char *entry_class,
