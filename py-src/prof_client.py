@@ -370,32 +370,62 @@ class ProfClient:
         offset = 4
         result = []
 
-        _ENTRY_HDR_FMT  = "<IQ"
+        _ENTRY_HDR_FMT  = "<BIQ"  # type(uint8) + status(uint32) + id(uint64)
         _ENTRY_HDR_SIZE = struct.calcsize(_ENTRY_HDR_FMT)
+        _LINE_FMT       = "<II"   # entry_line + exit_line
+        _LINE_FMT_SIZE  = struct.calcsize(_LINE_FMT)
+        _TYPE_METHOD    = 0
+        _TYPE_LINE      = 1
 
         for _ in range(count):
             if offset + _ENTRY_HDR_SIZE > len(body):
                 raise ValueError("truncated entry header")
-            status, instrument_id = struct.unpack_from(
+            instr_type, status, instrument_id = struct.unpack_from(
                 _ENTRY_HDR_FMT, body, offset
             )
             offset += _ENTRY_HDR_SIZE
 
-            class_ps = pstring(body, offset)
-            offset += class_ps.size
+            status_str = (
+                "deferred" if status == _LISTED_INSTR_DEFERRED else "active"
+            )
 
-            sig_ps = pstring(body, offset)
-            offset += sig_ps.size
+            if instr_type == _TYPE_METHOD:
+                class_ps = pstring(body, offset)
+                offset += class_ps.size
 
-            result.append({
-                "class_name": class_ps.value,
-                "method_sig": sig_ps.value,
-                "instrument_id": instrument_id,
-                "status": (
-                    "deferred" if status == _LISTED_INSTR_DEFERRED
-                    else "active"
-                ),
-            })
+                sig_ps = pstring(body, offset)
+                offset += sig_ps.size
+
+                result.append({
+                    "type": "method",
+                    "class_name": class_ps.value,
+                    "method_sig": sig_ps.value,
+                    "instrument_id": instrument_id,
+                    "status": status_str,
+                })
+            else:
+                if offset + _LINE_FMT_SIZE > len(body):
+                    raise ValueError("truncated line entry")
+                entry_line, exit_line = struct.unpack_from(
+                    _LINE_FMT, body, offset
+                )
+                offset += _LINE_FMT_SIZE
+
+                entry_class_ps = pstring(body, offset)
+                offset += entry_class_ps.size
+
+                exit_class_ps = pstring(body, offset)
+                offset += exit_class_ps.size
+
+                result.append({
+                    "type": "line",
+                    "entry_class": entry_class_ps.value,
+                    "entry_line": entry_line,
+                    "exit_class": exit_class_ps.value,
+                    "exit_line": exit_line,
+                    "instrument_id": instrument_id,
+                    "status": status_str,
+                })
 
         return result
 

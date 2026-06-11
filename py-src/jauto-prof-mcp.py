@@ -136,14 +136,23 @@ def get_async_errors() -> list[dict]:
 
 @mcp.tool()
 def get_instrumented_methods() -> list[dict]:
-    """Return all currently instrumented and deferred methods.
+    """Return all currently instrumented and deferred probes.
 
-    Each entry is a dict with:
+    Each entry includes:
+      type        - "method" or "line"
+      status      - "active" or "deferred" (deferred means the class has not
+                    yet loaded; instrumentation will be applied when it does)
+      instrument_id - integer ID usable with deinstrument_by_id
+
+    Method entries also include:
       class_name  - JVM internal class name
       method_sig  - method signature in "name:descriptor" form
-      status      - "active" if instrumentation is applied, or "deferred"
-                    if the class has not yet loaded and instrumentation will
-                    be applied when it does
+
+    Line entries also include:
+      entry_class - JVM internal class name for the entry probe
+      entry_line  - source line number of the entry probe
+      exit_class  - JVM internal class name for the exit probe
+      exit_line   - source line number of the exit probe
 
     Use this to audit what is currently being profiled, or to check whether
     a deferred instrumentation has been promoted to active after its class

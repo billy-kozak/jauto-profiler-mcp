@@ -95,17 +95,33 @@ enum listed_instr_status {
 	LISTED_INSTR_DEFERRED = 1,
 };
 
+enum listed_instr_type {
+	LISTED_INSTR_TYPE_METHOD = 0,
+	LISTED_INSTR_TYPE_LINE   = 1,
+};
+
 /*
  * Body of RESPONSE_LIST_INSTRUMENTED:
  *   uint32_t count
- *   count × { uint32_t status, uint64_t instrument_id,
- *              pstring class_name, pstring method_sig }
+ *   count × {
+ *     struct user_msg_instr_list_entry  (fixed header)
+ *     MI_METHOD: pstring class_name, pstring method_sig
+ *     MI_LINE:   struct user_msg_instr_list_line_data,
+ *                pstring entry_class_name, pstring exit_class_name
+ *   }
  * Entries are variable-length and must be walked sequentially.
  */
 struct PACKED user_msg_instr_list_entry {
+	uint8_t  type;
 	uint32_t status;
 	uint64_t instrument_id;
-	/* packed pstrings follow: class_name, then method_sig */
+};
+
+struct PACKED user_msg_instr_list_line_data {
+	uint32_t entry_line;
+	uint32_t exit_line;
+	/* pstring entry_class_name follows */
+	/* pstring exit_class_name follows */
 };
 
 

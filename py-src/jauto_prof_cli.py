@@ -103,10 +103,17 @@ def cmd_pause_threads(client, args):
 
 def cmd_list_instrumented(client, args):
     for entry in client.list_instrumented_methods():
-        print(
-            f"{entry['status']}\t{entry['instrument_id']}"
-            f"\t{entry['class_name']}\t{entry['method_sig']}"
-        )
+        if entry.get('type') == 'line':
+            print(
+                f"{entry['status']}\t{entry['instrument_id']}"
+                f"\t{entry['entry_class']}:{entry['entry_line']},"
+                f"\t{entry['exit_class']}:{entry['exit_line']}"
+            )
+        else:
+            print(
+                f"{entry['status']}\t{entry['instrument_id']}"
+                f"\t{entry['class_name']}\t{entry['method_sig']}"
+            )
 
 
 def cmd_get_async_errors(client, args):

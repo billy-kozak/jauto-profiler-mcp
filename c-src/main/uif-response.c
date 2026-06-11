@@ -21,6 +21,7 @@
 #include "util/pstring.h"
 #include "util/hash-tab.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -225,12 +226,23 @@ int uif_respond_list_instrumented(
 
 	mi_itr_init(mi, &itr);
 	while ((result = mi_iterate(mi, &itr)).entry != NULL) {
-		if (result.entry->type != MI_METHOD) {
-			continue;
-		}
 		body_size += sizeof(struct user_msg_instr_list_entry);
-		body_size += pstring_total_size(result.entry->entry_class_name);
-		body_size += pstring_total_size(result.entry->method.method_name);
+		if (result.entry->type == MI_METHOD) {
+			body_size += pstring_total_size(
+				result.entry->entry_class_name
+			);
+			body_size += pstring_total_size(
+				result.entry->method.method_name
+			);
+		} else {
+			body_size += sizeof(struct user_msg_instr_list_line_data);
+			body_size += pstring_total_size(
+				result.entry->entry_class_name
+			);
+			body_size += pstring_total_size(
+				result.entry->line.exit_class_name
+			);
+		}
 		count++;
 	}
 
@@ -248,18 +260,40 @@ int uif_respond_list_instrumented(
 
 	mi_itr_init(mi, &itr);
 	while ((result = mi_iterate(mi, &itr)).entry != NULL) {
-		if (result.entry->type != MI_METHOD) {
-			continue;
+		bool is_deferred;
+		if (result.entry->type == MI_METHOD) {
+			is_deferred = result.entry->method.deferred;
+		} else {
+			is_deferred = (
+				result.entry->line.entry_deferred ||
+				result.entry->line.exit_deferred
+			);
 		}
 		struct user_msg_instr_list_entry hdr = {
-			result.entry->method.deferred
-				? LISTED_INSTR_DEFERRED : LISTED_INSTR_ACTIVE,
+			result.entry->type == MI_METHOD
+				? LISTED_INSTR_TYPE_METHOD : LISTED_INSTR_TYPE_LINE,
+			is_deferred ? LISTED_INSTR_DEFERRED : LISTED_INSTR_ACTIVE,
 			result.id
 		};
 		memcpy(p, &hdr, sizeof(hdr));
 		p += sizeof(hdr);
-		p = pstring_memcpy_to(p, result.entry->entry_class_name);
-		p = pstring_memcpy_to(p, result.entry->method.method_name);
+		if (result.entry->type == MI_METHOD) {
+			p = pstring_memcpy_to(p, result.entry->entry_class_name);
+			p = pstring_memcpy_to(
+				p, result.entry->method.method_name
+			);
+		} else {
+			struct user_msg_instr_list_line_data line_data = {
+				(uint32_t)result.entry->line.entry_line_number,
+				(uint32_t)result.entry->line.exit_line_number,
+			};
+			memcpy(p, &line_data, sizeof(line_data));
+			p += sizeof(line_data);
+			p = pstring_memcpy_to(p, result.entry->entry_class_name);
+			p = pstring_memcpy_to(
+				p, result.entry->line.exit_class_name
+			);
+		}
 	}
 
 	uif_send(uif, client, response);
