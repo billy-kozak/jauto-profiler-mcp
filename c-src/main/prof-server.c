@@ -45,6 +45,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #define LOG_TAG "prof-server"
 
@@ -733,8 +734,26 @@ static void handle_usr_rq_instrument_line(
 	ps_usr_rq_instrument_line_dealloc(msg);
 }
 
-static void handle_shutdown_request(JNIEnv *jni_env, struct ps_msg *msg)
+static int resume_vm(struct prof_server *ps)
 {
+	int was_paused;
+
+	pthread_mutex_lock(&ps->resume_mutex);
+	was_paused = ps->paused;
+	if (ps->paused) {
+		ps->paused = 0;
+		pthread_cond_signal(&ps->resume_cond);
+	}
+	pthread_mutex_unlock(&ps->resume_mutex);
+
+	return was_paused;
+}
+
+static void handle_shutdown_request(
+	struct prof_server *ps,
+	JNIEnv *jni_env,
+	struct ps_msg *msg
+) {
 	int exit_code = msg->body.shutdown_request.exit_code;
 	char errmsg[PSM_SHUTDOWN_REQUEST_MSG_MAX];
 
@@ -749,22 +768,26 @@ static void handle_shutdown_request(JNIEnv *jni_env, struct ps_msg *msg)
 		LOG_WARN("shutdown requested: %s", errmsg);
 	}
 
-	jni_system_exit(jni_env, exit_code);
-}
-
-static int resume_vm(struct prof_server *ps)
-{
-	int was_paused;
-
+	/*
+	 * When paused, the main thread is blocked in ps_wait_for_resume()
+	 * on resume_cond. System.exit() would trigger Agent_OnUnload ->
+	 * ps_destroy, which destroys that cond and then calls free(ps),
+	 * leaving the thread permanently blocked in a futex on freed memory.
+	 * The JVM then cannot complete halt() and the process hangs.
+	 *
+	 * Use _exit() instead: it bypasses the Java shutdown sequence,
+	 * terminates all threads via exit_group, and lets the OS reclaim
+	 * resources. No user code runs.
+	 */
 	pthread_mutex_lock(&ps->resume_mutex);
-	was_paused = ps->paused;
-	if (ps->paused) {
-		ps->paused = 0;
-		pthread_cond_signal(&ps->resume_cond);
-	}
+	int is_paused = ps->paused;
 	pthread_mutex_unlock(&ps->resume_mutex);
 
-	return was_paused;
+	if (is_paused) {
+		_exit(exit_code);
+	}
+
+	jni_system_exit(jni_env, exit_code);
 }
 
 static void handle_usr_rq_resume(
@@ -842,7 +865,7 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 		ret = 0;
 		break;
 	case PS_SHUTDOWN_REQUEST:
-		handle_shutdown_request(jni_env, msg);
+		handle_shutdown_request(ps, jni_env, msg);
 		ret = 0;
 		break;
 	default:
