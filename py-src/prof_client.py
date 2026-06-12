@@ -213,14 +213,17 @@ class ProfClient:
         offset = 4
         result = []
 
-        for _ in range(count):
-            class_ps = pstring(body, offset)
-            class_name = class_ps.value
-            offset += class_ps.size
+        _INSTR_ID_FMT  = "<Q"
+        _INSTR_ID_SIZE = struct.calcsize(_INSTR_ID_FMT)
 
-            sig_ps = pstring(body, offset)
-            method_sig = sig_ps.value
-            offset += sig_ps.size
+        for _ in range(count):
+            if offset + _INSTR_ID_SIZE > len(body):
+                raise ValueError("truncated instrument_id in stats")
+            (instrument_id,) = struct.unpack_from(_INSTR_ID_FMT, body, offset)
+            offset += _INSTR_ID_SIZE
+
+            name_ps = pstring(body, offset)
+            offset += name_ps.size
 
             (snap_count,) = struct.unpack_from("<I", body, offset)
             offset += 4
@@ -239,8 +242,8 @@ class ProfClient:
                 })
 
             result.append({
-                "class_name": class_name,
-                "method_sig": method_sig,
+                "instrument_id": instrument_id,
+                "name": name_ps.value,
                 "snapshots": snapshots,
             })
 
@@ -525,28 +528,26 @@ class ProfClient:
 
 def compute_stat_summary(
     stats: list[dict],
-    class_name: str,
-    method_sig: str,
+    name: str,
     start_time: float,
     end_time: float,
 ) -> dict:
-    """Compute total runs and average ns/call for a method over a time window.
+    """Compute total runs and average ns/call for a probe over a time window.
 
     stats: output of ProfClient.get_stats()
+    name: profiler name as returned in the stats entry
     Snapshots are cumulative; the function diffs the first and last snapshot
     that fall within [start_time, end_time].
     """
     entry = None
 
     for e in stats:
-        if e["class_name"] == class_name and e["method_sig"] == method_sig:
+        if e["name"] == name:
             entry = e
             break
 
     if entry is None:
-        raise ValueError(
-            f"method not found in stats: {class_name} / {method_sig}"
-        )
+        raise ValueError(f"profiler not found in stats: {name}")
 
     snaps = [
         s for s in entry["snapshots"]
@@ -566,8 +567,8 @@ def compute_stat_summary(
     avg_ns = total_nanos / total_runs if total_runs > 0 else 0.0
 
     return {
-        "class_name": class_name,
-        "method_sig": method_sig,
+        "name": name,
+        "instrument_id": entry["instrument_id"],
         "start_time": start_time,
         "end_time": end_time,
         "total_runs": total_runs,

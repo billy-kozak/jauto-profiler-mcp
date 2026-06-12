@@ -47,19 +47,22 @@ public class ProfilerRegistry {
         collectorThread.start();
     }
 
-    synchronized static int create(String className, String methodSig) {
+    synchronized static int create(
+        long instrumentId, String className, String methodSig
+    ) {
+        return create(instrumentId, className + ":" + methodSig);
+    }
+
+    synchronized static int create(long instrumentId, String name) {
         int n = INSTANCE.entries.size();
         for (int i = 0; i < n; i++) {
             ProfilerEntry e = INSTANCE.entries.get(i);
-            if (e.profiler.className.equals(className) && e.profiler.methodSig.equals(methodSig)) {
-                if (e.profiler.active) {
-                    return -1;
-                }
-                INSTANCE.entries.set(i, new ProfilerEntry(new Profiler(className, methodSig)));
+            if (!e.profiler.active) {
+                INSTANCE.entries.set(i, new ProfilerEntry(new Profiler(instrumentId, name)));
                 return i;
             }
         }
-        INSTANCE.entries.add(new ProfilerEntry(new Profiler(className, methodSig)));
+        INSTANCE.entries.add(new ProfilerEntry(new Profiler(instrumentId, name)));
         return n;
     }
 
@@ -76,27 +79,24 @@ public class ProfilerRegistry {
         }
         int n = snapshot.size();
 
-        byte[][] classNameBytes = new byte[n][];
-        byte[][] methodSigBytes = new byte[n][];
+        byte[][] nameBytes = new byte[n][];
         ProfilerSnapshot[][] snapshots = new ProfilerSnapshot[n][];
 
         int totalSize = Integer.BYTES;
         for (int i = 0; i < n; i++) {
-            classNameBytes[i] = snapshot.get(i).profiler.className.getBytes(StandardCharsets.UTF_8);
-            methodSigBytes[i] = snapshot.get(i).profiler.methodSig.getBytes(StandardCharsets.UTF_8);
+            nameBytes[i] = snapshot.get(i).profiler.name.getBytes(StandardCharsets.UTF_8);
             snapshots[i] = snapshot.get(i).getOrderedSnapshots();
-            totalSize += Short.BYTES + classNameBytes[i].length;
-            totalSize += Short.BYTES + methodSigBytes[i].length;
+            totalSize += Long.BYTES;                           // instrumentId
+            totalSize += Short.BYTES + nameBytes[i].length;   // name pstring
             totalSize += Integer.BYTES + snapshots[i].length * (Long.BYTES * 3);
         }
 
         ByteBuffer buf = ByteBuffer.allocate(totalSize).order(ByteOrder.LITTLE_ENDIAN);
         buf.putInt(n);
         for (int i = 0; i < n; i++) {
-            buf.putShort((short) classNameBytes[i].length);
-            buf.put(classNameBytes[i]);
-            buf.putShort((short) methodSigBytes[i].length);
-            buf.put(methodSigBytes[i]);
+            buf.putLong(snapshot.get(i).profiler.instrumentId);
+            buf.putShort((short) nameBytes[i].length);
+            buf.put(nameBytes[i]);
             buf.putInt(snapshots[i].length);
             for (ProfilerSnapshot snap : snapshots[i]) {
                 buf.putLong(snap.timestamp);

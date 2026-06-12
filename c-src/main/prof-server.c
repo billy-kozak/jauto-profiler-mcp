@@ -204,7 +204,10 @@ static enum instrument_resp_status instrument_now(
 	enum instrument_resp_status status = INSTRUMENT_RP_ERROR;
 	int id;
 
-	id = jni_create_profiler(jni_env, (char *)ci->name->str, method_sig);
+	id = jni_create_profiler(
+		jni_env, instrument_id,
+		(char *)ci->name->str, method_sig
+	);
 	if (id == -1) {
 		status = INSTRUMENT_RP_DOUBLE_INSTRUMENT;
 		goto fail_cleanup_mi;

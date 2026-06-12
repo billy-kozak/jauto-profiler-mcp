@@ -29,7 +29,7 @@
 #define LOG_TAG "jni-profiler"
 
 #define REGISTRY_CLASS  "app/autoprofiler/ProfilerRegistry"
-#define CREATE_SIG      "(Ljava/lang/String;Ljava/lang/String;)I"
+#define CREATE_SIG      "(JLjava/lang/String;Ljava/lang/String;)I"
 #define REMOVE_SIG      "(I)V"
 #define GET_STATS_SIG   "()[B"
 
@@ -86,7 +86,10 @@ fail:
 }
 
 int jni_create_profiler(
-	JNIEnv *env, const char *class_name, const char *method_sig
+	JNIEnv *env,
+	uint64_t instrument_id,
+	const char *class_name,
+	const char *method_sig
 ) {
 	jstring j_class_name;
 	jstring j_method_sig;
@@ -108,7 +111,8 @@ int jni_create_profiler(
 	}
 
 	result = (*env)->CallStaticIntMethod(
-		env, registry_class, create_method, j_class_name, j_method_sig
+		env, registry_class, create_method,
+		(jlong)instrument_id, j_class_name, j_method_sig
 	);
 
 	(*env)->DeleteLocalRef(env, j_method_sig);

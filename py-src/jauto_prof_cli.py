@@ -87,9 +87,7 @@ def cmd_stat_summary(client, args):
     start = parse_time_arg(args.start_time)
     end   = parse_time_arg(args.end_time)
     stats = client.get_stats()
-    result = compute_stat_summary(
-        stats, args.class_name, args.method_sig, start, end
-    )
+    result = compute_stat_summary(stats, args.name, start, end)
     print(json.dumps(result, indent=2))
 
 
@@ -194,8 +192,7 @@ def main():
             'the current time (equivalent to 0.0).'
         ),
     )
-    p.add_argument('class_name', metavar='class')
-    p.add_argument('method_sig', metavar='method')
+    p.add_argument('name', metavar='name')
     p.add_argument('start_time', metavar='start')
     p.add_argument('end_time', metavar='end', nargs='?', default='0')
 

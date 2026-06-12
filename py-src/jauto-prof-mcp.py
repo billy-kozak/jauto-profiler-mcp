@@ -192,12 +192,12 @@ def deinstrument_method(class_name: str, method_sig: str) -> None:
 
 @mcp.tool()
 def dump_stats(output_file: str) -> str:
-    """Write profiling statistics for all instrumented methods to a JSON file.
+    """Write profiling statistics for all active probes to a JSON file.
 
     Each entry in the JSON contains:
-      class_name  - JVM internal class name
-      method_sig  - method signature in "name:descriptor" form
-      snapshots   - list of per-second snapshots in chronological order,
+      instrument_id - the unique ID assigned by the profiler
+      name          - human-readable probe name (methods: "className:methodSig")
+      snapshots     - list of per-second snapshots in chronological order,
                     each with timestamp (Unix seconds), call_count
                     (cumulative), and total_nanos (cumulative nanoseconds).
 
@@ -226,18 +226,17 @@ def dump_stats(output_file: str) -> str:
 
 @mcp.tool()
 def stat_summary(
-    class_name: str,
-    method_sig: str,
+    name: str,
     start_time: str | float,
     end_time: str | float = 0,
 ) -> dict:
-    """Return total runs and average ns/call for a method over a time window.
+    """Return total runs and average ns/call for a probe over a time window.
 
-    Fetches the current profiler stats and summarises the named method for
+    Fetches the current profiler stats and summarises the named probe for
     the window [start_time, end_time] (inclusive).
 
-    class_name: JVM internal class name (e.g. "org/example/MyClass")
-    method_sig: exact signature from get_class_methods (e.g. "doWork:(I)V")
+    name: profiler name as returned by dump_stats or get_instrumented_methods
+          (for methods this is "className:methodSig")
 
     start_time and end_time accept two forms:
       number  — seconds in the past from now (0 = now, 60 = one minute ago)
@@ -247,11 +246,11 @@ def stat_summary(
     end_time defaults to 0 (the current time).
 
     Returns a dict with:
-      class_name      - as supplied
-      method_sig      - as supplied
+      name            - as supplied
+      instrument_id   - the unique probe ID
       start_time      - resolved window start as a Unix timestamp
       end_time        - resolved window end as a Unix timestamp
-      total_runs      - total method invocations in the window
+      total_runs      - total invocations in the window
       avg_ns_per_call - average wall-clock nanoseconds per invocation
 
     At least two snapshots must fall within the requested window.
@@ -261,7 +260,7 @@ def stat_summary(
     start = resolve_time_arg(start_time)
     end   = resolve_time_arg(end_time)
     stats = ProfClient().get_stats()
-    return compute_stat_summary(stats, class_name, method_sig, start, end)
+    return compute_stat_summary(stats, name, start, end)
 
 
 @mcp.tool()

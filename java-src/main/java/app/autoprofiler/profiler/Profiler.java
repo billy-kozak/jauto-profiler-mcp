@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.LongAdder;
 
 public class Profiler {
 
-    public final String className;
-    public final String methodSig;
+    public final long instrumentId;
+    public final String name;
     public volatile boolean active = true;
 
     private final LongAdder callCount = new LongAdder();
@@ -32,9 +32,9 @@ public class Profiler {
     /* [0] = re-entry depth, [1] = System.nanoTime() at outermost entry */
     private final ThreadLocal<long[]> threadState = ThreadLocal.withInitial(() -> new long[2]);
 
-    public Profiler(String className, String methodSig) {
-        this.className = className;
-        this.methodSig = methodSig;
+    public Profiler(long instrumentId, String name) {
+        this.instrumentId = instrumentId;
+        this.name = name;
     }
 
     public void enter() {
