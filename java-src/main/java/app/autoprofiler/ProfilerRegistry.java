@@ -53,6 +53,12 @@ public class ProfilerRegistry {
         return create(instrumentId, className + ":" + methodSig);
     }
 
+    synchronized static int create(
+        long instrumentId, String entryClass, String exitClass, int entryLine, int exitLine
+    ) {
+        return create(instrumentId, entryClass + ":" + entryLine);
+    }
+
     synchronized static int create(long instrumentId, String name) {
         int n = INSTANCE.entries.size();
         for (int i = 0; i < n; i++) {
