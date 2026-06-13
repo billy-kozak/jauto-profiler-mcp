@@ -295,7 +295,7 @@ int bc_extract_methods(
 		desc_len = strlen(desc);
 		{
 			size_t str_len = name_len + 1 + desc_len;
-			struct pstring *ps = malloc(sizeof(*ps) + str_len);
+			struct pstring *ps = malloc(sizeof(*ps) + str_len + 1);
 			struct pstring **slot;
 
 			if (ps == NULL) {
@@ -305,6 +305,7 @@ int bc_extract_methods(
 			memcpy(ps->str, name, name_len);
 			ps->str[name_len] = ':';
 			memcpy(ps->str + name_len + 1, desc, desc_len);
+			ps->str[str_len] = '\0';
 
 			slot = method_list_add(methods);
 			if (slot == NULL) {
