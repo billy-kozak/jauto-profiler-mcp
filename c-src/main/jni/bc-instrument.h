@@ -26,7 +26,7 @@ int bc_instrument_init_refs(JNIEnv *env);
 /*
  * Return a heap-allocated transformed copy of class_data with
  * ProfilerRegistry.enter/exit injected into each method identified by
- * the parallel arrays method_names[]/method_descs[]/profiler_ids[] of
+ * method_sigs[] (in "name:descriptor" form) and profiler_ids[], both of
  * length count.  Caller must free() the result.
  * Returns NULL on error (OOM, malformed class, Java exception).
  */
@@ -34,8 +34,7 @@ unsigned char *bc_instrument_method(
 	JNIEnv *env,
 	const unsigned char *class_data,
 	size_t class_data_len,
-	const char **method_names,
-	const char **method_descs,
+	const char **method_sigs,
 	const int *profiler_ids,
 	int count,
 	size_t *new_len_out

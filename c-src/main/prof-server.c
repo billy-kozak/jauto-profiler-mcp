@@ -121,7 +121,7 @@ static unsigned char *do_method_instrumentation(
 	result = bc_instrument_method(
 		jni_env,
 		params->class_data, params->class_data_len,
-		params->method_names, params->method_descs,
+		params->method_sigs,
 		params->profiler_ids, params->count,
 		new_bc_len_out
 	);

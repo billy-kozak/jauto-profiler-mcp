@@ -26,7 +26,7 @@
 
 #define TRANSFORMER_CLASS "app/autoprofiler/transform/BytecodeTransformer"
 #define TRANSFORM_SIG \
-	"([B[Ljava/lang/String;[Ljava/lang/String;[I)[B"
+	"([B[Ljava/lang/String;[I)[B"
 
 static jclass transformer_class = NULL;
 static jmethodID transform_method = NULL;
@@ -74,16 +74,14 @@ unsigned char *bc_instrument_method(
 	JNIEnv *env,
 	const unsigned char *class_data,
 	size_t class_data_len,
-	const char **method_names,
-	const char **method_descs,
+	const char **method_sigs,
 	const int *profiler_ids,
 	int count,
 	size_t *new_len_out
 ) {
 	jclass string_class = NULL;
 	jbyteArray input_arr = NULL;
-	jobjectArray j_names = NULL;
-	jobjectArray j_descs = NULL;
+	jobjectArray j_sigs = NULL;
 	jintArray j_ids = NULL;
 	jbyteArray result_arr = NULL;
 	jint *ids_buf = NULL;
@@ -108,27 +106,16 @@ unsigned char *bc_instrument_method(
 		env, input_arr, 0, (jsize)class_data_len, (const jbyte *)class_data
 	);
 
-	j_names = (*env)->NewObjectArray(env, (jsize)count, string_class, NULL);
-	if (j_names == NULL) {
-		goto cleanup;
-	}
-	j_descs = (*env)->NewObjectArray(env, (jsize)count, string_class, NULL);
-	if (j_descs == NULL) {
+	j_sigs = (*env)->NewObjectArray(env, (jsize)count, string_class, NULL);
+	if (j_sigs == NULL) {
 		goto cleanup;
 	}
 	for (i = 0; i < count; i++) {
-		jstring s = (*env)->NewStringUTF(env, method_names[i]);
+		jstring s = (*env)->NewStringUTF(env, method_sigs[i]);
 		if (s == NULL) {
 			goto cleanup;
 		}
-		(*env)->SetObjectArrayElement(env, j_names, (jsize)i, s);
-		(*env)->DeleteLocalRef(env, s);
-
-		s = (*env)->NewStringUTF(env, method_descs[i]);
-		if (s == NULL) {
-			goto cleanup;
-		}
-		(*env)->SetObjectArrayElement(env, j_descs, (jsize)i, s);
+		(*env)->SetObjectArrayElement(env, j_sigs, (jsize)i, s);
 		(*env)->DeleteLocalRef(env, s);
 	}
 
@@ -149,7 +136,7 @@ unsigned char *bc_instrument_method(
 
 	result_arr = (*env)->CallStaticObjectMethod(
 		env, transformer_class, transform_method,
-		input_arr, j_names, j_descs, j_ids
+		input_arr, j_sigs, j_ids
 	);
 
 	if ((*env)->ExceptionCheck(env)) {
@@ -173,10 +160,9 @@ unsigned char *bc_instrument_method(
 cleanup:
 	free(ids_buf);
 	if (string_class != NULL) { (*env)->DeleteLocalRef(env, string_class); }
-	if (input_arr   != NULL) { (*env)->DeleteLocalRef(env, input_arr);   }
-	if (j_names     != NULL) { (*env)->DeleteLocalRef(env, j_names);     }
-	if (j_descs     != NULL) { (*env)->DeleteLocalRef(env, j_descs);     }
-	if (j_ids       != NULL) { (*env)->DeleteLocalRef(env, j_ids);       }
-	if (result_arr  != NULL) { (*env)->DeleteLocalRef(env, result_arr);  }
+	if (input_arr    != NULL) { (*env)->DeleteLocalRef(env, input_arr);    }
+	if (j_sigs       != NULL) { (*env)->DeleteLocalRef(env, j_sigs);       }
+	if (j_ids        != NULL) { (*env)->DeleteLocalRef(env, j_ids);        }
+	if (result_arr   != NULL) { (*env)->DeleteLocalRef(env, result_arr);   }
 	return out;
 }

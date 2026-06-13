@@ -31,10 +31,16 @@ class BytecodeTransformer {
 
     static byte[] transform(
         byte[] classBytes,
-        String[] methodNames,
-        String[] methodDescs,
+        String[] methodSigs,
         int[] profilerIds
     ) {
+        String[] methodNames = new String[methodSigs.length];
+        String[] methodDescs = new String[methodSigs.length];
+        for (int i = 0; i < methodSigs.length; i++) {
+            int colon = methodSigs[i].indexOf(':');
+            methodNames[i] = methodSigs[i].substring(0, colon);
+            methodDescs[i] = methodSigs[i].substring(colon + 1);
+        }
         ClassReader cr = new ClassReader(classBytes);
         ClassWriter cw = new SafeClassWriter(cr, ClassWriter.COMPUTE_FRAMES);
         InstrumentingVisitor iv = new InstrumentingVisitor(

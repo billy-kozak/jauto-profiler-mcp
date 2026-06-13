@@ -98,11 +98,9 @@ int ci_remove_instrumented_line(struct class_info *ci, int line_number);
 struct class_instrument_params {
 	const unsigned char *class_data;
 	size_t class_data_len;
-	const char **method_names;
-	const char **method_descs;
+	const char **method_sigs;
 	int *profiler_ids;
 	int count;
-	char *name_buf;
 };
 
 struct class_instrument_params *class_instrument_params_alloc(
