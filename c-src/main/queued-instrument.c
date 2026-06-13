@@ -37,6 +37,7 @@ static void queued_instr_method_init(
 ) {
 	qi->type = QI_METHOD;
 	qi->instrument_id = 0;
+	qi->profiler_id = -1;
 	qi->class_name = pstring_from_cstr(class_name);
 	qi->method_sig = pstring_from_cstr(method_sig);
 }

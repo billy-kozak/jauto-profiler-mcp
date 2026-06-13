@@ -33,6 +33,7 @@ enum qi_type {
 struct queued_instr {
 	enum qi_type type;
 	uint64_t instrument_id;
+	int profiler_id;
 	struct pstring *class_name;
 	union {
 		struct pstring *method_sig;

@@ -169,7 +169,8 @@ static enum instrument_resp_status instrument_later(
 	struct prof_server *ps,
 	const char *class_name,
 	const char *method_sig,
-	uint64_t instrument_id
+	uint64_t instrument_id,
+	int profiler_id
 ) {
 	struct queued_instr *qi = queued_instr_method_add(
 		&ps->queued_instruments, class_name, method_sig
@@ -188,18 +189,18 @@ static enum instrument_resp_status instrument_later(
 		return INSTRUMENT_RP_ERROR;
 	}
 	qi->instrument_id = instrument_id;
+	qi->profiler_id = profiler_id;
 	return INSTRUMENT_RP_DEFERRED;
 }
 
 static int create_profiler_for_method(
 	JNIEnv *jni_env,
-	const struct class_info *ci,
 	const struct mi_entry *entry,
 	uint64_t instrument_id
 ) {
 	int id = jni_create_profiler(
 		jni_env, instrument_id,
-		(char *)ci->name->str,
+		(char *)entry->entry_class_name->str,
 		(char *)entry->method.method_name->str
 	);
 	if (id < 0 && id != -1) {
@@ -278,36 +279,31 @@ static enum instrument_resp_status instrument_now(
 	struct prof_server *ps,
 	JNIEnv *jni_env,
 	struct class_info *ci,
-	uint64_t instrument_id
+	uint64_t instrument_id,
+	int profiler_id
 ) {
 	const struct mi_entry *entry = mi_find(
 		ps->master_instruments, instrument_id
 	);
-	int id;
 
-	id = create_profiler_for_method(jni_env, ci, entry, instrument_id);
-	if (id == -1) {
-		mi_remove(ps->master_instruments, instrument_id);
-		return INSTRUMENT_RP_DOUBLE_INSTRUMENT;
-	}
-	if (id < 0) {
-		mi_remove(ps->master_instruments, instrument_id);
-		return INSTRUMENT_RP_ERROR;
-	}
+	int pop_ret = populate_class_info_method(
+		ci, entry, profiler_id, instrument_id
+	);
 
-	if (populate_class_info_method(ci, entry, id, instrument_id) != 0) {
-		jni_remove_profiler(jni_env, id);
+	if (pop_ret != 0) {
+		jni_remove_profiler(jni_env, profiler_id);
 		mi_remove(ps->master_instruments, instrument_id);
 		return INSTRUMENT_RP_ERROR;
 	}
 
-	if (perform_method_instrumentation(
-		ps, jni_env, ci, entry, id, instrument_id
-	) != 0) {
+	int instr_ret = perform_method_instrumentation(
+		ps, jni_env, ci, entry, profiler_id, instrument_id
+	);
+	if (instr_ret != 0) {
 		undo_ci_method_and_mi(
 			entry, ci, ps->master_instruments, instrument_id
 		);
-		jni_remove_profiler(jni_env, id);
+		jni_remove_profiler(jni_env, profiler_id);
 		return INSTRUMENT_RP_ERROR;
 	}
 
@@ -322,7 +318,7 @@ static void do_deferred_method_instrumentation(
 ) {
 	const char *method_sig = (char *)qi->method_sig->str;
 	enum instrument_resp_status status = instrument_now(
-		ps, jni_env, ci, qi->instrument_id
+		ps, jni_env, ci, qi->instrument_id, qi->profiler_id
 	);
 	if (status != INSTRUMENT_RP_OK) {
 		LOG_WARN(
@@ -406,6 +402,8 @@ static void handle_usr_rq_instrument_method(
 	struct class_info *ci;
 	enum instrument_resp_status status;
 	uint64_t instrument_id;
+	const struct mi_entry *entry;
+	int profiler_id;
 
 	instrument_id = mi_add_method(
 		ps->master_instruments, class_name, class_name, method_sig
@@ -415,14 +413,27 @@ static void handle_usr_rq_instrument_method(
 		goto respond;
 	}
 
+	entry = mi_find(ps->master_instruments, instrument_id);
+	profiler_id = create_profiler_for_method(jni_env, entry, instrument_id);
+	if (profiler_id < 0) {
+		mi_remove(ps->master_instruments, instrument_id);
+		status = profiler_id == -1 ?
+			INSTRUMENT_RP_DOUBLE_INSTRUMENT : INSTRUMENT_RP_ERROR;
+		instrument_id = 0;
+		goto respond;
+	}
+
 	ci = ci_list_find_by_name(&ps->loaded_classes, class_name);
 	if (ci == NULL) {
 		status = instrument_later(
-			ps, class_name, method_sig, instrument_id
+			ps, class_name, method_sig, instrument_id, profiler_id
 		);
+		if (status == INSTRUMENT_RP_ERROR) {
+			jni_remove_profiler(jni_env, profiler_id);
+		}
 	} else {
 		status = instrument_now(
-			ps, jni_env, ci, instrument_id
+			ps, jni_env, ci, instrument_id, profiler_id
 		);
 	}
 	bool status_ok = (
@@ -533,9 +544,14 @@ static void handle_usr_rq_deinstrument_method(
 			&ps->queued_instruments, instrument_id
 		);
 		if (idx >= 0) {
+			int deferred_profiler_id =
+				ps->queued_instruments.arr[idx].profiler_id;
 			queued_instr_list_remove_and_destroy(
 				&ps->queued_instruments, idx
 			);
+			if (jni_remove_profiler(jni_env, deferred_profiler_id) != 0) {
+				LOG_ERROR("jni_remove_profiler failed for deferred deinstrument");
+			}
 		}
 		mi_remove(ps->master_instruments, instrument_id);
 		goto respond;
@@ -629,9 +645,14 @@ static void handle_usr_rq_deinstrument_by_id(
 			&ps->queued_instruments, instrument_id
 		);
 		if (idx >= 0) {
+			int deferred_profiler_id =
+				ps->queued_instruments.arr[idx].profiler_id;
 			queued_instr_list_remove_and_destroy(
 				&ps->queued_instruments, idx
 			);
+			if (jni_remove_profiler(jni_env, deferred_profiler_id) != 0) {
+				LOG_ERROR("jni_remove_profiler failed for deferred deinstrument-by-id");
+			}
 		}
 		mi_remove(ps->master_instruments, instrument_id);
 		goto respond;
