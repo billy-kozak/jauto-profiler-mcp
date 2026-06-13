@@ -191,79 +191,127 @@ static enum instrument_resp_status instrument_later(
 	return INSTRUMENT_RP_DEFERRED;
 }
 
-static enum instrument_resp_status instrument_now(
-	struct prof_server *ps,
+static int create_profiler_for_method(
 	JNIEnv *jni_env,
-	struct class_info *ci,
-	const char *method_sig,
+	const struct class_info *ci,
+	const struct mi_entry *entry,
 	uint64_t instrument_id
 ) {
-	struct instrumented_method *im = NULL;
-	unsigned char *new_bc = NULL;
-	size_t new_bc_len;
-	enum instrument_resp_status status = INSTRUMENT_RP_ERROR;
-	int id;
-
-	id = jni_create_profiler(
+	int id = jni_create_profiler(
 		jni_env, instrument_id,
-		(char *)ci->name->str, method_sig
+		(char *)ci->name->str,
+		(char *)entry->method.method_name->str
 	);
-	if (id == -1) {
-		status = INSTRUMENT_RP_DOUBLE_INSTRUMENT;
-		goto fail_cleanup_mi;
-	}
-	if (id < 0) {
+	if (id < 0 && id != -1) {
 		LOG_ERROR("jni_create_profiler failed");
-		goto fail_cleanup_mi;
 	}
+	return id;
+}
 
-	im = instrumented_method_list_add_and_init(
-		&ci->instrumented, method_sig, id
+static int populate_class_info_method(
+	struct class_info *ci,
+	const struct mi_entry *entry,
+	int profiler_id,
+	uint64_t instrument_id
+) {
+	const char *method_sig = (char *)entry->method.method_name->str;
+	struct instrumented_method *im = instrumented_method_list_add_and_init(
+		&ci->instrumented, method_sig, profiler_id
 	);
 	if (im == NULL || im->method_sig == NULL) {
 		if (im != NULL) {
 			ci->instrumented.len--;
 		}
-		goto fail_cleanup_profiler;
+		return -1;
 	}
-
 	im->instrument_id = instrument_id;
+	return 0;
+}
+
+static int perform_method_instrumentation(
+	struct prof_server *ps,
+	JNIEnv *jni_env,
+	struct class_info *ci,
+	const struct mi_entry *entry,
+	int profiler_id,
+	uint64_t instrument_id
+) {
+	const char *method_sig = (char *)entry->method.method_name->str;
+	unsigned char *new_bc;
+	size_t new_bc_len;
+	int ret;
 
 	new_bc = do_method_instrumentation(jni_env, ci, &new_bc_len);
 	if (new_bc == NULL) {
-		goto fail_cleanup_instrumented;
+		return -1;
 	}
 
-	int ret_retransform = retransform_pending(
-		ps,
-		jni_env,
-		(char *)ci->name->str,
-		method_sig,
-		new_bc,
-		new_bc_len,
-		id
+	ret = retransform_pending(
+		ps, jni_env,
+		(char *)ci->name->str, method_sig,
+		new_bc, new_bc_len, profiler_id
 	);
-	if (ret_retransform != 0) {
-		goto fail_cleanup_instrumented;
+	free(new_bc);
+
+	if (ret != 0) {
+		return -1;
 	}
 
 	mi_mark_method_applied(ps->master_instruments, instrument_id);
-	status = INSTRUMENT_RP_OK;
+	return 0;
+}
 
-	free(new_bc);
-	return status;
-
-fail_cleanup_instrumented:
-	instrumented_method_list_remove_and_destroy(
-		&ci->instrumented, (int)(ci->instrumented.len - 1)
+static void undo_ci_method_and_mi(
+	const struct mi_entry *entry,
+	struct class_info *ci,
+	struct master_instruments *mi,
+	uint64_t instrument_id
+) {
+	uint64_t ignored_id;
+	ci_remove_instrumented_by_sig(
+		ci, (char *)entry->method.method_name->str, &ignored_id
 	);
-fail_cleanup_profiler:
-	jni_remove_profiler(jni_env, id);
-fail_cleanup_mi:
-	mi_remove(ps->master_instruments, instrument_id);
+	mi_remove(mi, instrument_id);
+}
 
-	free(new_bc);
-	return status;
+static enum instrument_resp_status instrument_now(
+	struct prof_server *ps,
+	JNIEnv *jni_env,
+	struct class_info *ci,
+	uint64_t instrument_id
+) {
+	const struct mi_entry *entry = mi_find(
+		ps->master_instruments, instrument_id
+	);
+	int id;
+
+	id = create_profiler_for_method(jni_env, ci, entry, instrument_id);
+	if (id == -1) {
+		mi_remove(ps->master_instruments, instrument_id);
+		return INSTRUMENT_RP_DOUBLE_INSTRUMENT;
+	}
+	if (id < 0) {
+		mi_remove(ps->master_instruments, instrument_id);
+		return INSTRUMENT_RP_ERROR;
+	}
+
+	if (populate_class_info_method(ci, entry, id, instrument_id) != 0) {
+		jni_remove_profiler(jni_env, id);
+		mi_remove(ps->master_instruments, instrument_id);
+		return INSTRUMENT_RP_ERROR;
+	}
+
+	if (perform_method_instrumentation(
+		ps, jni_env, ci, entry, id, instrument_id
+	) != 0) {
+		undo_ci_method_and_mi(
+			entry, ci, ps->master_instruments, instrument_id
+		);
+		jni_remove_profiler(jni_env, id);
+		return INSTRUMENT_RP_ERROR;
+	}
+
+	return INSTRUMENT_RP_OK;
 }
 
 static void do_deferred_method_instrumentation(
@@ -274,7 +322,7 @@ static void do_deferred_method_instrumentation(
 ) {
 	const char *method_sig = (char *)qi->method_sig->str;
 	enum instrument_resp_status status = instrument_now(
-		ps, jni_env, ci, method_sig, qi->instrument_id
+		ps, jni_env, ci, qi->instrument_id
 	);
 	if (status != INSTRUMENT_RP_OK) {
 		LOG_WARN(
@@ -374,7 +422,7 @@ static void handle_usr_rq_instrument_method(
 		);
 	} else {
 		status = instrument_now(
-			ps, jni_env, ci, method_sig, instrument_id
+			ps, jni_env, ci, instrument_id
 		);
 	}
 	bool status_ok = (
