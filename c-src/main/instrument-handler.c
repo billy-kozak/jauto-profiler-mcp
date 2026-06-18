@@ -549,29 +549,18 @@ static enum deinstrument_resp_status deinstrument_method_by_id(
 		return DEINSTRUMENT_RP_FAIL;
 	}
 
-	if (ci->instrumented.len > 0) {
-		new_bc = do_instrumentation(jni_env, ci, &new_bc_len);
-		if (new_bc == NULL) {
-			status = DEINSTRUMENT_RP_FAIL;
-			goto cleanup;
-		}
-		if (retransform_pending(
-			ctx, jni_env, jvmti,
-			(char *)entry->entry_class_name->str,
-			NULL, new_bc, new_bc_len, -1
-		) != 0) {
-			LOG_ERROR("deinstrument-by-id retransform failed");
-			status = DEINSTRUMENT_RP_FAIL;
-		}
-	} else {
-		if (retransform_pending(
-			ctx, jni_env, jvmti,
-			(char *)entry->entry_class_name->str,
-			NULL, ci->bytecode, ci->bytecode_len, -1
-		) != 0) {
-			LOG_ERROR("deinstrument-by-id retransform failed");
-			status = DEINSTRUMENT_RP_FAIL;
-		}
+	new_bc = do_instrumentation(jni_env, ci, &new_bc_len);
+	if (new_bc == NULL) {
+		status = DEINSTRUMENT_RP_FAIL;
+		goto cleanup;
+	}
+	if (retransform_pending(
+		ctx, jni_env, jvmti,
+		(char *)entry->entry_class_name->str,
+		NULL, new_bc, new_bc_len, -1
+	) != 0) {
+		LOG_ERROR("deinstrument-by-id retransform failed");
+		status = DEINSTRUMENT_RP_FAIL;
 	}
 
 cleanup:
@@ -712,89 +701,9 @@ enum deinstrument_resp_status ih_deinstrument_method(
 		);
 		return DEINSTRUMENT_RP_FAIL;
 	}
-	uint64_t instrument_id = found.id;
-	const struct mi_entry *entry = found.entry;
-
-	if (entry->method.deferred) {
-		int idx = queued_instr_list_find_by_instrument_id(
-			&ctx->queued_instruments, instrument_id
-		);
-		if (idx >= 0) {
-			int deferred_profiler_id =
-				ctx->queued_instruments.arr[idx].profiler_id;
-			queued_instr_list_remove_and_destroy(
-				&ctx->queued_instruments, idx
-			);
-			int rm_ret = jni_remove_profiler(
-				jni_env, deferred_profiler_id
-			);
-			if (rm_ret != 0) {
-				LOG_ERROR(
-					"jni_remove_profiler failed for "
-					"deferred deinstrument"
-				);
-			}
-		}
-		mi_remove(ctx->master_instruments, instrument_id);
-		return DEINSTRUMENT_RP_OK;
-	}
-
-	struct class_info *ci = ci_list_find_by_name(
-		&ctx->loaded_classes, class_name
+	return deinstrument_method_by_id(
+		ctx, jni_env, jvmti, found.entry, found.id
 	);
-	if (ci == NULL) {
-		LOG_WARN("deinstrument: class not found: %s", class_name);
-		return DEINSTRUMENT_RP_FAIL;
-	}
-
-	unsigned char *new_bc = NULL;
-	size_t new_bc_len;
-	enum deinstrument_resp_status status = DEINSTRUMENT_RP_OK;
-	uint64_t ignored_id;
-
-	int profiler_id = ci_remove_instrumented_by_sig(
-		ci, method_sig, &ignored_id
-	);
-	if (profiler_id == -1) {
-		LOG_WARN(
-			"deinstrument: %s not instrumented in %s",
-			method_sig, class_name
-		);
-		return DEINSTRUMENT_RP_FAIL;
-	}
-
-	if (ci->instrumented.len > 0) {
-		new_bc = do_instrumentation(jni_env, ci, &new_bc_len);
-		if (new_bc == NULL) {
-			status = DEINSTRUMENT_RP_FAIL;
-			goto cleanup;
-		}
-		int r = retransform_pending(
-			ctx, jni_env, jvmti, class_name, NULL, new_bc,
-			new_bc_len, -1
-		) ;
-		if (r != 0) {
-			LOG_ERROR("deinstrument retransform failed");
-			status = DEINSTRUMENT_RP_FAIL;
-		}
-	} else {
-		int r = retransform_pending(
-			ctx, jni_env, jvmti, class_name, NULL,
-			ci->bytecode, ci->bytecode_len, -1
-		);
-		if (r != 0) {
-			LOG_ERROR("deinstrument retransform failed");
-			status = DEINSTRUMENT_RP_FAIL;
-		}
-	}
-
-cleanup:
-	free(new_bc);
-	mi_remove(ctx->master_instruments, instrument_id);
-	if (jni_remove_profiler(jni_env, profiler_id) != 0) {
-		LOG_ERROR("jni_remove_profiler failed");
-	}
-	return status;
 }
 
 enum deinstrument_resp_status ih_deinstrument_by_id(
