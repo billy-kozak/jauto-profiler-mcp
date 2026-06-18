@@ -49,7 +49,9 @@ int queued_instr_list_init(
 struct queued_instr *queued_instr_method_add(
 	struct queued_instr_list *arr,
 	const char *class_name,
-	const char *method_sig
+	const char *method_sig,
+	int profiler_id,
+	uint64_t instrument_id
 );
 void queued_instr_list_remove_and_destroy(
 	struct queued_instr_list *arr, int index

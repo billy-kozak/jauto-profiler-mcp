@@ -173,7 +173,11 @@ static enum instrument_resp_status instrument_later(
 	int profiler_id
 ) {
 	struct queued_instr *qi = queued_instr_method_add(
-		&ps->queued_instruments, class_name, method_sig
+		&ps->queued_instruments,
+		class_name,
+		method_sig,
+		profiler_id,
+		instrument_id
 	);
 	bool alloc_ok = (
 		qi != NULL && qi->class_name != NULL && qi->method_sig != NULL
@@ -188,8 +192,6 @@ static enum instrument_resp_status instrument_later(
 		mi_remove(ps->master_instruments, instrument_id);
 		return INSTRUMENT_RP_ERROR;
 	}
-	qi->instrument_id = instrument_id;
-	qi->profiler_id = profiler_id;
 	return INSTRUMENT_RP_DEFERRED;
 }
 

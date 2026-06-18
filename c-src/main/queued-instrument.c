@@ -33,11 +33,13 @@ DYNARR_FUNCS(
 static void queued_instr_method_init(
 	struct queued_instr *qi,
 	const char *class_name,
-	const char *method_sig
+	const char *method_sig,
+	int profiler_id,
+	uint64_t instrument_id
 ) {
 	qi->type = QI_METHOD;
-	qi->instrument_id = 0;
-	qi->profiler_id = -1;
+	qi->instrument_id = instrument_id;
+	qi->profiler_id = profiler_id;
 	qi->class_name = pstring_from_cstr(class_name);
 	qi->method_sig = pstring_from_cstr(method_sig);
 }
@@ -53,12 +55,16 @@ static void queued_instr_destroy(struct queued_instr *qi)
 struct queued_instr *queued_instr_method_add(
 	struct queued_instr_list *arr,
 	const char *class_name,
-	const char *method_sig
+	const char *method_sig,
+	int profiler_id,
+	uint64_t instrument_id
 ) {
 	struct queued_instr *qi = queued_instr_list_add(arr);
 
 	if (qi != NULL) {
-		queued_instr_method_init(qi, class_name, method_sig);
+		queued_instr_method_init(
+			qi, class_name, method_sig, profiler_id, instrument_id
+		);
 	}
 
 	return qi;
