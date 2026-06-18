@@ -145,6 +145,12 @@ int uif_respond_instrument(
 	uint64_t instrument_id
 ) {
 	struct user_msg_instr_resp body = {(uint32_t)status, instrument_id};
+	bool status_ok = (
+		status == INSTRUMENT_RP_OK || status == INSTRUMENT_RP_DEFERRED
+	);
+	if (!status_ok) {
+		body.instrument_id = 0;
+	}
 
 	return uif_send_short_response(
 		uif, client, RESPONSE_INSTRUMENT_METHOD, &body, sizeof(body)

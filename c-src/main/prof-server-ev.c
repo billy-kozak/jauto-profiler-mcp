@@ -168,17 +168,17 @@ struct ps_msg *ps_usr_rq_instrument_method_alloc(
 
 	uif_client_acquire(client);
 	msg->type = USR_RQ_INSTRUMENT_METHOD;
-	msg->body.usr_rq_instrument_method.client = client;
-	msg->body.usr_rq_instrument_method.class_name = class_copy;
-	msg->body.usr_rq_instrument_method.method_sig = sig_copy;
+	msg->body.usr_rq_instr_method.client = client;
+	msg->body.usr_rq_instr_method.class_name = class_copy;
+	msg->body.usr_rq_instr_method.method_sig = sig_copy;
 	return msg;
 }
 
 void ps_usr_rq_instrument_method_dealloc(struct ps_msg *msg)
 {
-	uif_client_release(msg->body.usr_rq_instrument_method.client);
-	free(msg->body.usr_rq_instrument_method.class_name);
-	free(msg->body.usr_rq_instrument_method.method_sig);
+	uif_client_release(msg->body.usr_rq_instr_method.client);
+	free(msg->body.usr_rq_instr_method.class_name);
+	free(msg->body.usr_rq_instr_method.method_sig);
 	free(msg);
 }
 

@@ -397,13 +397,10 @@ static void handle_usr_rq_instrument_method(
 	JNIEnv *jni_env,
 	struct ps_msg *msg
 ) {
-	struct user_if_client *client =
-		msg->body.usr_rq_instrument_method.client;
-	const char *class_name = msg->body.usr_rq_instrument_method.class_name;
-	const char *method_sig = msg->body.usr_rq_instrument_method.method_sig;
-	struct class_info *ci;
+	struct user_if_client *client = msg->body.usr_rq_instr_method.client;
+	const char *class_name = msg->body.usr_rq_instr_method.class_name;
+	const char *method_sig = msg->body.usr_rq_instr_method.method_sig;
 	enum instrument_resp_status status;
-	int profiler_id;
 
 	struct mi_val miv = mi_add_method(
 		ps->master_instruments, class_name, class_name, method_sig
@@ -416,16 +413,19 @@ static void handle_usr_rq_instrument_method(
 		goto respond;
 	}
 
-	profiler_id = create_profiler_for_method(jni_env, entry, instrument_id);
+	int profiler_id = create_profiler_for_method(
+		jni_env, entry, instrument_id
+	);
 	if (profiler_id < 0) {
 		mi_remove(ps->master_instruments, instrument_id);
 		status = profiler_id == -1 ?
 			INSTRUMENT_RP_DOUBLE_INSTRUMENT : INSTRUMENT_RP_ERROR;
-		instrument_id = 0;
 		goto respond;
 	}
 
-	ci = ci_list_find_by_name(&ps->loaded_classes, class_name);
+	struct class_info *ci = ci_list_find_by_name(
+		&ps->loaded_classes, class_name
+	);
 	if (ci == NULL) {
 		status = instrument_later(
 			ps, class_name, method_sig, instrument_id, profiler_id
@@ -437,12 +437,6 @@ static void handle_usr_rq_instrument_method(
 		status = instrument_now(
 			ps, jni_env, ci, instrument_id, profiler_id
 		);
-	}
-	bool status_ok = (
-		status == INSTRUMENT_RP_OK || status == INSTRUMENT_RP_DEFERRED
-	);
-	if (!status_ok) {
-		instrument_id = 0;
 	}
 
 respond:

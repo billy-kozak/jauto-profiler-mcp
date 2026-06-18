@@ -63,7 +63,7 @@ struct psm_usr_rq_class_methods {
 	char *class_name;
 };
 
-struct psm_usr_rq_instrument_method {
+struct psm_usr_rq_instr_method {
 	struct user_if_client *client;
 	char *class_name;
 	char *method_sig;
@@ -114,7 +114,7 @@ struct ps_msg {
 		struct psm_class_loaded class_loaded;
 		struct psm_usr_rq_loaded_classes usr_rq_loaded_classes;
 		struct psm_usr_rq_class_methods usr_rq_class_methods;
-		struct psm_usr_rq_instrument_method usr_rq_instrument_method;
+		struct psm_usr_rq_instr_method usr_rq_instr_method;
 		struct psm_usr_rq_get_stats usr_rq_get_stats;
 		struct psm_shutdown_request shutdown_request;
 		struct psm_usr_rq_deinstrument_method usr_rq_deinstrument_method;
