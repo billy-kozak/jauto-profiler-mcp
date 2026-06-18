@@ -185,8 +185,9 @@ int ci_remove_instrumented_line(struct class_info *ci, int line_number)
 
 	for (i = 0; i < lines->len; i++) {
 		if (lines->arr[i].line_number == line_number) {
+			int profiler_id = lines->arr[i].profiler_id;
 			instrumented_lines_remove(lines, (int)i);
-			return 0;
+			return profiler_id;
 		}
 	}
 	return -1;

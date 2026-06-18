@@ -93,6 +93,7 @@ struct instrumented_line *ci_add_instrumented_line(
 	int profiler_id,
 	enum instrument_type type
 );
+/* Returns profiler_id on success, -1 if not found. */
 int ci_remove_instrumented_line(struct class_info *ci, int line_number);
 
 struct class_instrument_params {
