@@ -105,7 +105,7 @@ static void handle_usr_rq_class_methods(
 	ps_usr_rq_class_methods_dealloc(msg);
 }
 
-static unsigned char *do_method_instrumentation(
+static unsigned char *do_instrumentation(
 	JNIEnv *jni_env,
 	const struct class_info *ci,
 	size_t *new_bc_len_out
@@ -211,7 +211,7 @@ static int create_profiler_for_method(
 	return id;
 }
 
-static int populate_class_info_method(
+static int populate_class_info(
 	struct class_info *ci,
 	const struct mi_entry *entry,
 	int profiler_id,
@@ -231,7 +231,7 @@ static int populate_class_info_method(
 	return 0;
 }
 
-static int perform_method_instrumentation(
+static int perform_instrumentation(
 	struct prof_server *ps,
 	JNIEnv *jni_env,
 	struct class_info *ci,
@@ -244,7 +244,7 @@ static int perform_method_instrumentation(
 	size_t new_bc_len;
 	int ret;
 
-	new_bc = do_method_instrumentation(jni_env, ci, &new_bc_len);
+	new_bc = do_instrumentation(jni_env, ci, &new_bc_len);
 	if (new_bc == NULL) {
 		return -1;
 	}
@@ -264,7 +264,7 @@ static int perform_method_instrumentation(
 	return 0;
 }
 
-static void undo_ci_method_and_mi(
+static void undo_ci_and_mi(
 	const struct mi_entry *entry,
 	struct class_info *ci,
 	struct master_instruments *mi,
@@ -288,7 +288,7 @@ static enum instrument_resp_status instrument_now(
 		ps->master_instruments, instrument_id
 	);
 
-	int pop_ret = populate_class_info_method(
+	int pop_ret = populate_class_info(
 		ci, entry, profiler_id, instrument_id
 	);
 
@@ -298,11 +298,11 @@ static enum instrument_resp_status instrument_now(
 		return INSTRUMENT_RP_ERROR;
 	}
 
-	int instr_ret = perform_method_instrumentation(
+	int instr_ret = perform_instrumentation(
 		ps, jni_env, ci, entry, profiler_id, instrument_id
 	);
 	if (instr_ret != 0) {
-		undo_ci_method_and_mi(
+		undo_ci_and_mi(
 			entry, ci, ps->master_instruments, instrument_id
 		);
 		jni_remove_profiler(jni_env, profiler_id);
@@ -573,7 +573,7 @@ static void handle_usr_rq_deinstrument_method(
 	}
 
 	if (ci->instrumented.len > 0) {
-		new_bc = do_method_instrumentation(jni_env, ci, &new_bc_len);
+		new_bc = do_instrumentation(jni_env, ci, &new_bc_len);
 		if (new_bc == NULL) {
 			resp_status = DEINSTRUMENT_RP_FAIL;
 			goto cleanup_profiler;
@@ -680,7 +680,7 @@ static void handle_usr_rq_deinstrument_by_id(
 	}
 
 	if (ci->instrumented.len > 0) {
-		new_bc = do_method_instrumentation(jni_env, ci, &new_bc_len);
+		new_bc = do_instrumentation(jni_env, ci, &new_bc_len);
 		if (new_bc == NULL) {
 			resp_status = DEINSTRUMENT_RP_FAIL;
 			goto cleanup_profiler;
