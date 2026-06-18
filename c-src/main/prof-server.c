@@ -401,19 +401,19 @@ static void handle_usr_rq_instrument_method(
 	const char *method_sig = msg->body.usr_rq_instrument_method.method_sig;
 	struct class_info *ci;
 	enum instrument_resp_status status;
-	uint64_t instrument_id;
-	const struct mi_entry *entry;
 	int profiler_id;
 
-	instrument_id = mi_add_method(
+	struct mi_val miv = mi_add_method(
 		ps->master_instruments, class_name, class_name, method_sig
 	);
+	uint64_t instrument_id = miv.id;
+	const struct mi_entry *entry = miv.entry;
+
 	if (instrument_id == 0) {
 		status = INSTRUMENT_RP_ERROR;
 		goto respond;
 	}
 
-	entry = mi_find(ps->master_instruments, instrument_id);
 	profiler_id = create_profiler_for_method(jni_env, entry, instrument_id);
 	if (profiler_id < 0) {
 		mi_remove(ps->master_instruments, instrument_id);
@@ -526,7 +526,7 @@ static void handle_usr_rq_deinstrument_method(
 	int profiler_id;
 	uint64_t ignored_id;
 
-	struct mi_itr_result found = mi_find_method_by_name(
+	struct mi_val found = mi_find_method_by_name(
 		ps->master_instruments, class_name, method_sig
 	);
 	if (found.entry == NULL) {

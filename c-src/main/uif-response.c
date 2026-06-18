@@ -216,7 +216,7 @@ int uif_respond_list_instrumented(
 ) {
 	struct user_msg *response;
 	struct mi_itr itr;
-	struct mi_itr_result result;
+	struct mi_val result;
 	uint8_t *p;
 	uint32_t body_size;
 	uint32_t count;

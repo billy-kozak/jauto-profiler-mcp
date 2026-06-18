@@ -96,15 +96,16 @@ static uint64_t mi_insert(struct master_instruments *mi, struct mi_entry *e)
 	return id;
 }
 
-uint64_t mi_add_method(
+struct mi_val mi_add_method(
 	struct master_instruments *mi,
 	const char *entry_class,
 	const char *exit_class,
 	const char *method_name
 ) {
+	struct mi_val ret = {0, NULL};
 	struct mi_entry *e = malloc(sizeof(*e));
 	if (e == NULL) {
-		return 0;
+		return ret;
 	}
 	e->type = MI_METHOD;
 	e->entry_class_name = pstring_from_cstr(entry_class);
@@ -113,9 +114,13 @@ uint64_t mi_add_method(
 
 	if (e->entry_class_name == NULL || e->method.method_name == NULL) {
 		mi_entry_free(e);
-		return 0;
+		return ret;
 	}
-	return mi_insert(mi, e);
+
+	ret.id = mi_insert(mi, e);
+	ret.entry = e;
+
+	return ret;
 }
 
 uint64_t mi_add_linep(
@@ -220,13 +225,13 @@ int mi_mark_line_exit_applied(struct master_instruments *mi, uint64_t id)
 	return 0;
 }
 
-struct mi_itr_result mi_find_method_by_name(
+struct mi_val mi_find_method_by_name(
 	const struct master_instruments *mi,
 	const char *class_name,
 	const char *method_sig
 ) {
 	struct mi_itr itr;
-	struct mi_itr_result r;
+	struct mi_val r;
 
 	mi_itr_init(mi, &itr);
 	while ((r = mi_iterate(mi, &itr)).entry != NULL) {
@@ -242,7 +247,7 @@ struct mi_itr_result mi_find_method_by_name(
 			return r;
 		}
 	}
-	return (struct mi_itr_result){0, NULL};
+	return (struct mi_val){0, NULL};
 }
 
 void mi_itr_init(const struct master_instruments *mi, struct mi_itr *itr)
@@ -250,10 +255,10 @@ void mi_itr_init(const struct master_instruments *mi, struct mi_itr *itr)
 	hash_tab_itr_init(mi->tab, (struct hash_tab_itr *)itr);
 }
 
-struct mi_itr_result mi_iterate(
+struct mi_val mi_iterate(
 	const struct master_instruments *mi, struct mi_itr *itr
 ) {
-	struct mi_itr_result result = {0, NULL};
+	struct mi_val result = {0, NULL};
 	const struct hash_tab_kv *kv = hash_tab_iterate(
 		mi->tab, (struct hash_tab_itr *)itr
 	);

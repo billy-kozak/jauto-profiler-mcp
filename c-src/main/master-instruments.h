@@ -52,7 +52,7 @@ struct mi_itr {
 	void *_next;
 };
 
-struct mi_itr_result {
+struct mi_val {
 	uint64_t id;
 	const struct mi_entry *entry;
 };
@@ -60,7 +60,7 @@ struct mi_itr_result {
 struct master_instruments *mi_alloc(void);
 void mi_free(struct master_instruments *mi);
 
-uint64_t mi_add_method(
+struct mi_val mi_add_method(
 	struct master_instruments *mi,
 	const char *entry_class,
 	const char *exit_class,
@@ -91,14 +91,14 @@ const struct mi_entry *mi_find(
 	const struct master_instruments *mi, uint64_t id
 );
 
-struct mi_itr_result mi_find_method_by_name(
+struct mi_val mi_find_method_by_name(
 	const struct master_instruments *mi,
 	const char *class_name,
 	const char *method_sig
 );
 
 void mi_itr_init(const struct master_instruments *mi, struct mi_itr *itr);
-struct mi_itr_result mi_iterate(
+struct mi_val mi_iterate(
 	const struct master_instruments *mi, struct mi_itr *itr
 );
 
