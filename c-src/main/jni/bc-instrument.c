@@ -26,7 +26,7 @@
 
 #define TRANSFORMER_CLASS "app/autoprofiler/transform/BytecodeTransformer"
 #define TRANSFORM_SIG \
-	"([B[Ljava/lang/String;[I)[B"
+	"([B[Ljava/lang/String;[I[I[I)[B"
 
 static jclass transformer_class = NULL;
 static jmethodID transform_method = NULL;
@@ -77,12 +77,17 @@ unsigned char *bc_instrument_method(
 	const char **method_sigs,
 	const int *profiler_ids,
 	int count,
+	const int *line_numbers,
+	const int *line_profiler_ids,
+	int line_count,
 	size_t *new_len_out
 ) {
 	jclass string_class = NULL;
 	jbyteArray input_arr = NULL;
 	jobjectArray j_sigs = NULL;
 	jintArray j_ids = NULL;
+	jintArray j_line_nums = NULL;
+	jintArray j_line_ids = NULL;
 	jbyteArray result_arr = NULL;
 	jint *ids_buf = NULL;
 	jsize result_len;
@@ -134,9 +139,34 @@ unsigned char *bc_instrument_method(
 	free(ids_buf);
 	ids_buf = NULL;
 
+	j_line_nums = (*env)->NewIntArray(env, (jsize)line_count);
+	if (j_line_nums == NULL) {
+		goto cleanup;
+	}
+	j_line_ids = (*env)->NewIntArray(env, (jsize)line_count);
+	if (j_line_ids == NULL) {
+		goto cleanup;
+	}
+	if (line_count > 0) {
+		ids_buf = malloc((size_t)line_count * sizeof(jint));
+		if (ids_buf == NULL) {
+			goto cleanup;
+		}
+		for (i = 0; i < line_count; i++) {
+			ids_buf[i] = (jint)line_numbers[i];
+		}
+		(*env)->SetIntArrayRegion(env, j_line_nums, 0, (jsize)line_count, ids_buf);
+		for (i = 0; i < line_count; i++) {
+			ids_buf[i] = (jint)line_profiler_ids[i];
+		}
+		(*env)->SetIntArrayRegion(env, j_line_ids, 0, (jsize)line_count, ids_buf);
+		free(ids_buf);
+		ids_buf = NULL;
+	}
+
 	result_arr = (*env)->CallStaticObjectMethod(
 		env, transformer_class, transform_method,
-		input_arr, j_sigs, j_ids
+		input_arr, j_sigs, j_ids, j_line_nums, j_line_ids
 	);
 
 	if ((*env)->ExceptionCheck(env)) {
@@ -163,6 +193,8 @@ cleanup:
 	if (input_arr    != NULL) { (*env)->DeleteLocalRef(env, input_arr);    }
 	if (j_sigs       != NULL) { (*env)->DeleteLocalRef(env, j_sigs);       }
 	if (j_ids        != NULL) { (*env)->DeleteLocalRef(env, j_ids);        }
+	if (j_line_nums  != NULL) { (*env)->DeleteLocalRef(env, j_line_nums);  }
+	if (j_line_ids   != NULL) { (*env)->DeleteLocalRef(env, j_line_ids);   }
 	if (result_arr   != NULL) { (*env)->DeleteLocalRef(env, result_arr);   }
 	return out;
 }

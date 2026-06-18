@@ -121,8 +121,8 @@ static unsigned char *do_instrumentation(
 	result = bc_instrument_method(
 		jni_env,
 		params->class_data, params->class_data_len,
-		params->method_sigs,
-		params->profiler_ids, params->count,
+		params->method_sigs, params->profiler_ids, params->count,
+		params->line_numbers, params->line_profiler_ids, params->line_count,
 		new_bc_len_out
 	);
 
@@ -231,6 +231,26 @@ static int populate_class_info(
 	return 0;
 }
 
+static int populate_class_info_line(
+	struct class_info *ci_entry,
+	struct class_info *ci_exit,
+	const struct mi_entry *entry,
+	int profiler_id
+) {
+	if (ci_add_instrumented_line(
+		ci_entry, entry->line.entry_line_number, profiler_id, INSTRUMENT_ENTER
+	) == NULL) {
+		return -1;
+	}
+	if (ci_add_instrumented_line(
+		ci_exit, entry->line.exit_line_number, profiler_id, INSTRUMENT_EXIT
+	) == NULL) {
+		ci_remove_instrumented_line(ci_entry, entry->line.entry_line_number);
+		return -1;
+	}
+	return 0;
+}
+
 static int perform_instrumentation(
 	struct prof_server *ps,
 	JNIEnv *jni_env,
@@ -239,7 +259,9 @@ static int perform_instrumentation(
 	int profiler_id,
 	uint64_t instrument_id
 ) {
-	const char *method_sig = (char *)entry->method.method_name->str;
+	const char *method_sig = (entry->type == MI_METHOD)
+		? (char *)entry->method.method_name->str
+		: NULL;
 	unsigned char *new_bc;
 	size_t new_bc_len;
 	int ret;
@@ -260,8 +282,47 @@ static int perform_instrumentation(
 		return -1;
 	}
 
-	mi_mark_method_applied(ps->master_instruments, instrument_id);
+	if (entry->type == MI_METHOD) {
+		mi_mark_method_applied(ps->master_instruments, instrument_id);
+	}
 	return 0;
+}
+
+static int perform_instrumentation_line(
+	struct prof_server *ps,
+	JNIEnv *jni_env,
+	struct class_info *ci_entry,
+	struct class_info *ci_exit,
+	const struct mi_entry *entry,
+	int profiler_id,
+	uint64_t instrument_id
+) {
+	int r = perform_instrumentation(
+		ps, jni_env, ci_entry, entry, profiler_id, instrument_id
+	);
+	if (r != 0) {
+		goto fail;
+	}
+
+	if (ci_exit != ci_entry) {
+		r = perform_instrumentation(
+			ps, jni_env, ci_exit, entry, profiler_id, instrument_id
+		);
+		if (r != 0) {
+			goto fail;
+		}
+	}
+	mi_mark_line_entry_applied(ps->master_instruments, instrument_id);
+	mi_mark_line_exit_applied(ps->master_instruments, instrument_id);
+
+	return 0;
+
+fail:
+	ci_remove_instrumented_line(ci_entry, entry->line.entry_line_number);
+	ci_remove_instrumented_line(ci_exit, entry->line.exit_line_number);
+	jni_remove_profiler(jni_env, profiler_id);
+	mi_remove(ps->master_instruments, instrument_id);
+	return -1;
 }
 
 static void undo_ci_and_mi(
@@ -302,9 +363,7 @@ static enum instrument_resp_status instrument_now(
 		ps, jni_env, ci, entry, profiler_id, instrument_id
 	);
 	if (instr_ret != 0) {
-		undo_ci_and_mi(
-			entry, ci, ps->master_instruments, instrument_id
-		);
+		undo_ci_and_mi(entry, ci, ps->master_instruments, instrument_id);
 		jni_remove_profiler(jni_env, profiler_id);
 		return INSTRUMENT_RP_ERROR;
 	}
@@ -773,6 +832,7 @@ static void handle_usr_rq_pause_threads(
 
 static void handle_usr_rq_instrument_line(
 	struct prof_server *ps,
+	JNIEnv *jni_env,
 	struct ps_msg *msg
 ) {
 	struct user_if_client *client =
@@ -785,19 +845,74 @@ static void handle_usr_rq_instrument_line(
 	uint32_t exit_line  = msg->body.usr_rq_instrument_line.exit_line;
 	enum instrument_line_resp_status status;
 	uint64_t instrument_id;
+	const struct mi_entry *entry;
+	struct class_info *ci_entry;
+	struct class_info *ci_exit;
+	int profiler_id = -1;
 
-	instrument_id = mi_add_linep(
+	struct mi_val miv = mi_add_linep(
 		ps->master_instruments,
 		entry_class, exit_class,
 		(int)entry_line, (int)exit_line
 	);
+	instrument_id = miv.id;
+	entry = miv.entry;
 
 	if (instrument_id == 0) {
 		status = INSTRUMENT_LINE_RP_ERROR;
-	} else {
-		status = INSTRUMENT_LINE_RP_DEFERRED;
+		goto respond;
 	}
 
+	ci_entry = ci_list_find_by_name(
+		&ps->loaded_classes, (char *)entry_class->str
+	);
+	ci_exit = ci_list_find_by_name(
+		&ps->loaded_classes, (char *)exit_class->str
+	);
+
+	if (ci_entry == NULL || ci_exit == NULL) {
+		/* deferred path: stub — not yet implemented */
+		status = INSTRUMENT_LINE_RP_DEFERRED;
+		goto respond;
+	}
+
+	profiler_id = jni_create_line_profiler(
+		jni_env, instrument_id,
+		(char *)entry_class->str, (char *)exit_class->str,
+		(int)entry_line, (int)exit_line
+	);
+	if (profiler_id < 0) {
+		mi_remove(ps->master_instruments, instrument_id);
+		status = INSTRUMENT_LINE_RP_ERROR;
+		goto respond;
+	}
+
+	int pop_ret = populate_class_info_line(
+		ci_entry, ci_exit, entry, profiler_id
+	);
+	if (pop_ret != 0) {
+		jni_remove_profiler(jni_env, profiler_id);
+		mi_remove(ps->master_instruments, instrument_id);
+		status = INSTRUMENT_LINE_RP_ERROR;
+		goto respond;
+	}
+
+	int instr_ret = perform_instrumentation_line(
+		ps,
+		jni_env,
+		ci_entry,
+		ci_exit,
+		entry,
+		profiler_id,
+		instrument_id
+	);
+	if (instr_ret != 0) {
+		status = INSTRUMENT_LINE_RP_ERROR;
+	} else {
+		status = INSTRUMENT_LINE_RP_OK;
+	}
+
+respond:
 	uif_respond_instrument_line(ps->uif, client, status, instrument_id);
 	ps_usr_rq_instrument_line_dealloc(msg);
 }
@@ -926,7 +1041,7 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 		handle_usr_rq_deinstrument_by_id(ps, jni_env, msg);
 		break;
 	case USR_RQ_INSTRUMENT_LINE:
-		handle_usr_rq_instrument_line(ps, msg);
+		handle_usr_rq_instrument_line(ps, jni_env, msg);
 		break;
 	case PS_SHUTDOWN:
 		free(msg);

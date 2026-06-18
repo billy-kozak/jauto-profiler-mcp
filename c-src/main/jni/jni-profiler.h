@@ -30,6 +30,14 @@ int jni_create_profiler(
 	const char *class_name,
 	const char *method_sig
 );
+int jni_create_line_profiler(
+	JNIEnv *env,
+	uint64_t instrument_id,
+	const char *entry_class,
+	const char *exit_class,
+	int entry_line,
+	int exit_line
+);
 int jni_remove_profiler(JNIEnv *env, int profiler_id);
 int jni_get_profiler_stats(JNIEnv *env, uint8_t **buf_out, size_t *len_out);
 int jni_retransform_class(

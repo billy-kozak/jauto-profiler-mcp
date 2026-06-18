@@ -66,14 +66,14 @@ struct mi_val mi_add_method(
 	const char *exit_class,
 	const char *method_name
 );
-uint64_t mi_add_line(
+struct mi_val mi_add_line(
 	struct master_instruments *mi,
 	const char *entry_class,
 	const char *exit_class,
 	int entry_line,
 	int exit_line
 );
-uint64_t mi_add_linep(
+struct mi_val mi_add_linep(
 	struct master_instruments *mi,
 	const struct pstring *entry_class,
 	const struct pstring *exit_class,

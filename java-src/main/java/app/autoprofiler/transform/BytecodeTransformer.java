@@ -32,7 +32,9 @@ class BytecodeTransformer {
     static byte[] transform(
         byte[] classBytes,
         String[] methodSigs,
-        int[] profilerIds
+        int[] profilerIds,
+        int[] lineNumbers,
+        int[] lineProfilerIds
     ) {
         String[] methodNames = new String[methodSigs.length];
         String[] methodDescs = new String[methodSigs.length];

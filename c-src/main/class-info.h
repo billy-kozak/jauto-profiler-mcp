@@ -101,6 +101,9 @@ struct class_instrument_params {
 	const char **method_sigs;
 	int *profiler_ids;
 	int count;
+	int *line_numbers;
+	int *line_profiler_ids;
+	int line_count;
 };
 
 struct class_instrument_params *class_instrument_params_alloc(

@@ -37,6 +37,9 @@ unsigned char *bc_instrument_method(
 	const char **method_sigs,
 	const int *profiler_ids,
 	int count,
+	const int *line_numbers,
+	const int *line_profiler_ids,
+	int line_count,
 	size_t *new_len_out
 );
 

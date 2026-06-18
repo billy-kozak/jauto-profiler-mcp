@@ -28,13 +28,15 @@
 
 #define LOG_TAG "jni-profiler"
 
-#define REGISTRY_CLASS  "app/autoprofiler/ProfilerRegistry"
-#define CREATE_SIG      "(JLjava/lang/String;Ljava/lang/String;)I"
-#define REMOVE_SIG      "(I)V"
-#define GET_STATS_SIG   "()[B"
+#define REGISTRY_CLASS       "app/autoprofiler/ProfilerRegistry"
+#define CREATE_SIG           "(JLjava/lang/String;Ljava/lang/String;)I"
+#define CREATE_LINE_SIG      "(JLjava/lang/String;Ljava/lang/String;II)I"
+#define REMOVE_SIG           "(I)V"
+#define GET_STATS_SIG        "()[B"
 
 static jclass registry_class = NULL;
 static jmethodID create_method = NULL;
+static jmethodID create_line_method = NULL;
 static jmethodID remove_method = NULL;
 static jmethodID get_stats_method = NULL;
 
@@ -61,6 +63,13 @@ int jni_profiler_init_refs(JNIEnv *env)
 		env, registry_class, "create", CREATE_SIG
 	);
 	if (create_method == NULL) {
+		goto fail;
+	}
+
+	create_line_method = (*env)->GetStaticMethodID(
+		env, registry_class, "create", CREATE_LINE_SIG
+	);
+	if (create_line_method == NULL) {
 		goto fail;
 	}
 
@@ -117,6 +126,50 @@ int jni_create_profiler(
 
 	(*env)->DeleteLocalRef(env, j_method_sig);
 	(*env)->DeleteLocalRef(env, j_class_name);
+
+	if ((*env)->ExceptionCheck(env)) {
+		(*env)->ExceptionClear(env);
+		return -2;
+	}
+
+	return (int)result;
+}
+
+int jni_create_line_profiler(
+	JNIEnv *env,
+	uint64_t instrument_id,
+	const char *entry_class,
+	const char *exit_class,
+	int entry_line,
+	int exit_line
+) {
+	jstring j_entry_class;
+	jstring j_exit_class;
+	jint result;
+
+	if (registry_class == NULL) {
+		return -1;
+	}
+
+	j_entry_class = (*env)->NewStringUTF(env, entry_class);
+	if (j_entry_class == NULL) {
+		return -1;
+	}
+
+	j_exit_class = (*env)->NewStringUTF(env, exit_class);
+	if (j_exit_class == NULL) {
+		(*env)->DeleteLocalRef(env, j_entry_class);
+		return -1;
+	}
+
+	result = (*env)->CallStaticIntMethod(
+		env, registry_class, create_line_method,
+		(jlong)instrument_id, j_entry_class, j_exit_class,
+		(jint)entry_line, (jint)exit_line
+	);
+
+	(*env)->DeleteLocalRef(env, j_exit_class);
+	(*env)->DeleteLocalRef(env, j_entry_class);
 
 	if ((*env)->ExceptionCheck(env)) {
 		(*env)->ExceptionClear(env);

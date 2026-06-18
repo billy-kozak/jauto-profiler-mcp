@@ -123,16 +123,17 @@ struct mi_val mi_add_method(
 	return ret;
 }
 
-uint64_t mi_add_linep(
+struct mi_val mi_add_linep(
 	struct master_instruments *mi,
 	const struct pstring *entry_class,
 	const struct pstring *exit_class,
 	int entry_line,
 	int exit_line
 ) {
+	struct mi_val ret = {0, NULL};
 	struct mi_entry *e = malloc(sizeof(*e));
 	if (e == NULL) {
-		return 0;
+		return ret;
 	}
 	e->type = MI_LINE;
 	e->entry_class_name      = pstring_dup(entry_class);
@@ -144,25 +145,29 @@ uint64_t mi_add_linep(
 
 	if (e->entry_class_name == NULL || e->line.exit_class_name == NULL) {
 		mi_entry_free(e);
-		return 0;
+		return ret;
 	}
-	return mi_insert(mi, e);
+
+	ret.id = mi_insert(mi, e);
+	ret.entry = e;
+	return ret;
 }
 
-uint64_t mi_add_line(
+struct mi_val mi_add_line(
 	struct master_instruments *mi,
 	const char *entry_class,
 	const char *exit_class,
 	int entry_line,
 	int exit_line
 ) {
+	struct mi_val ret = {0, NULL};
 	struct mi_entry *e = malloc(sizeof(*e));
 	if (e == NULL) {
-		return 0;
+		return ret;
 	}
 	e->type = MI_LINE;
-	e->entry_class_name = pstring_from_cstr(entry_class);
-	e->line.exit_class_name  = pstring_from_cstr(exit_class);
+	e->entry_class_name     = pstring_from_cstr(entry_class);
+	e->line.exit_class_name = pstring_from_cstr(exit_class);
 	e->line.entry_line_number = entry_line;
 	e->line.exit_line_number  = exit_line;
 	e->line.entry_deferred = true;
@@ -170,9 +175,12 @@ uint64_t mi_add_line(
 
 	if (e->entry_class_name == NULL || e->line.exit_class_name == NULL) {
 		mi_entry_free(e);
-		return 0;
+		return ret;
 	}
-	return mi_insert(mi, e);
+
+	ret.id = mi_insert(mi, e);
+	ret.entry = e;
+	return ret;
 }
 
 void mi_remove(struct master_instruments *mi, uint64_t id)
