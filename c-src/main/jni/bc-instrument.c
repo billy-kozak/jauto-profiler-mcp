@@ -19,6 +19,7 @@
 #include "bc-instrument.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "util/log.h"
 
@@ -84,6 +85,16 @@ unsigned char *bc_instrument_method(
 ) {
 	jclass string_class = NULL;
 	jbyteArray input_arr = NULL;
+
+	if (count == 0 && line_count == 0) {
+		unsigned char *copy = malloc(class_data_len);
+		if (copy == NULL) {
+			return NULL;
+		}
+		memcpy(copy, class_data, class_data_len);
+		*new_len_out = class_data_len;
+		return copy;
+	}
 	jobjectArray j_sigs = NULL;
 	jintArray j_ids = NULL;
 	jintArray j_line_nums = NULL;

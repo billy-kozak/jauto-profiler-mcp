@@ -28,12 +28,11 @@
 #include "class-info.h"
 #include "class-info-list.h"
 #include "bytecode.h"
-#include "jni/jni-profiler.h"
 #include "jni/jni-system.h"
+#include "jni/jni-profiler.h"
 #include "jni/bc-instrument.h"
 #include "ps-thread-state.h"
-#include "queued-instrument.h"
-#include "master-instruments.h"
+#include "instrument-handler.h"
 #include "prof-err-log.h"
 #include "util/log.h"
 
@@ -49,14 +48,6 @@
 
 #define LOG_TAG "prof-server"
 
-struct pending_instrument {
-	volatile const char *class_name;
-	volatile const char *method_sig;
-	volatile const unsigned char *bytecode;
-	volatile size_t bytecode_len;
-	volatile int profiler_id;
-};
-
 struct prof_server {
 	struct ev_queue *ev_q;
 	struct user_if *uif;
@@ -65,11 +56,8 @@ struct prof_server {
 	pthread_mutex_t resume_mutex;
 	pthread_cond_t resume_cond;
 	int paused;
-	struct class_info_list loaded_classes;
-	struct queued_instr_list queued_instruments;
-	struct master_instruments *master_instruments;
+	struct instr_ctx instr_ctx;
 	int thread_running;
-	struct pending_instrument pending;
 	jthread agent_thread;
 	struct ps_thread_pause *thread_pause;
 	struct prof_err_log err_log;
@@ -85,7 +73,7 @@ static void handle_usr_rq_loaded_classes(
 	free(msg);
 
 	uif_respond_loaded_classes(
-		ps->uif, client, &ps->loaded_classes
+		ps->uif, client, &ps->instr_ctx.loaded_classes
 	);
 	uif_client_release(client);
 }
@@ -96,329 +84,13 @@ static void handle_usr_rq_class_methods(
 ) {
 	const char *class_name = msg->body.usr_rq_class_methods.class_name;
 	struct class_info *ci = ci_list_find_by_name(
-		&ps->loaded_classes, class_name
+		&ps->instr_ctx.loaded_classes, class_name
 	);
 
 	uif_respond_class_methods(
 		ps->uif, msg->body.usr_rq_class_methods.client, ci
 	);
 	ps_usr_rq_class_methods_dealloc(msg);
-}
-
-static unsigned char *do_instrumentation(
-	JNIEnv *jni_env,
-	const struct class_info *ci,
-	size_t *new_bc_len_out
-) {
-	struct class_instrument_params *params;
-	unsigned char *result;
-
-	params = class_instrument_params_alloc(ci);
-	if (params == NULL) {
-		return NULL;
-	}
-
-	result = bc_instrument_method(
-		jni_env,
-		params->class_data, params->class_data_len,
-		params->method_sigs, params->profiler_ids, params->count,
-		params->line_numbers, params->line_profiler_ids, params->line_count,
-		new_bc_len_out
-	);
-
-	if (result == NULL) {
-		LOG_ERROR("bc_instrument_method failed");
-	}
-
-	class_instrument_params_free(params);
-	return result;
-}
-
-static int retransform_pending(
-	struct prof_server *ps,
-	JNIEnv *jni_env,
-	const char *class_name,
-	const char *method_sig,
-	const unsigned char *new_bc,
-	size_t new_bc_len,
-	int profiler_id
-) {
-	int ret;
-
-	ps->pending.class_name   = class_name;
-	ps->pending.method_sig   = method_sig;
-	ps->pending.bytecode     = new_bc;
-	ps->pending.bytecode_len = new_bc_len;
-	ps->pending.profiler_id  = profiler_id;
-
-	ret = jni_retransform_class(jni_env, ps->jvmti, class_name);
-	if (ret != 0) {
-		LOG_ERROR("RetransformClasses failed");
-	}
-
-	ps->pending.class_name   = NULL;
-	ps->pending.method_sig   = NULL;
-	ps->pending.bytecode     = NULL;
-	ps->pending.bytecode_len = 0;
-	ps->pending.profiler_id  = -1;
-
-	return ret;
-}
-
-static enum instrument_resp_status instrument_later(
-	struct prof_server *ps,
-	const char *class_name,
-	const char *method_sig,
-	uint64_t instrument_id,
-	int profiler_id
-) {
-	struct queued_instr *qi = queued_instr_method_add(
-		&ps->queued_instruments,
-		class_name,
-		method_sig,
-		profiler_id,
-		instrument_id
-	);
-	bool alloc_ok = (
-		qi != NULL && qi->class_name != NULL && qi->method_sig != NULL
-	);
-	if (!alloc_ok) {
-		if (qi != NULL) {
-			queued_instr_list_remove_and_destroy(
-				&ps->queued_instruments,
-				(int)(ps->queued_instruments.len - 1)
-			);
-		}
-		mi_remove(ps->master_instruments, instrument_id);
-		return INSTRUMENT_RP_ERROR;
-	}
-	return INSTRUMENT_RP_DEFERRED;
-}
-
-static int create_profiler_for_method(
-	JNIEnv *jni_env,
-	const struct mi_entry *entry,
-	uint64_t instrument_id
-) {
-	int id = jni_create_profiler(
-		jni_env, instrument_id,
-		(char *)entry->entry_class_name->str,
-		(char *)entry->method.method_name->str
-	);
-	if (id < 0 && id != -1) {
-		LOG_ERROR("jni_create_profiler failed");
-	}
-	return id;
-}
-
-static int populate_class_info(
-	struct class_info *ci,
-	const struct mi_entry *entry,
-	int profiler_id,
-	uint64_t instrument_id
-) {
-	const char *method_sig = (char *)entry->method.method_name->str;
-	struct instrumented_method *im = instrumented_method_list_add_and_init(
-		&ci->instrumented, method_sig, profiler_id
-	);
-	if (im == NULL || im->method_sig == NULL) {
-		if (im != NULL) {
-			ci->instrumented.len--;
-		}
-		return -1;
-	}
-	im->instrument_id = instrument_id;
-	return 0;
-}
-
-static int populate_class_info_line(
-	struct class_info *ci_entry,
-	struct class_info *ci_exit,
-	const struct mi_entry *entry,
-	int profiler_id
-) {
-	if (ci_add_instrumented_line(
-		ci_entry, entry->line.entry_line_number, profiler_id, INSTRUMENT_ENTER
-	) == NULL) {
-		return -1;
-	}
-	if (ci_add_instrumented_line(
-		ci_exit, entry->line.exit_line_number, profiler_id, INSTRUMENT_EXIT
-	) == NULL) {
-		ci_remove_instrumented_line(ci_entry, entry->line.entry_line_number);
-		return -1;
-	}
-	return 0;
-}
-
-static int perform_instrumentation(
-	struct prof_server *ps,
-	JNIEnv *jni_env,
-	struct class_info *ci,
-	const struct mi_entry *entry,
-	int profiler_id,
-	uint64_t instrument_id
-) {
-	const char *method_sig = (entry->type == MI_METHOD)
-		? (char *)entry->method.method_name->str
-		: NULL;
-	unsigned char *new_bc;
-	size_t new_bc_len;
-	int ret;
-
-	new_bc = do_instrumentation(jni_env, ci, &new_bc_len);
-	if (new_bc == NULL) {
-		return -1;
-	}
-
-	ret = retransform_pending(
-		ps, jni_env,
-		(char *)ci->name->str, method_sig,
-		new_bc, new_bc_len, profiler_id
-	);
-	free(new_bc);
-
-	if (ret != 0) {
-		return -1;
-	}
-
-	if (entry->type == MI_METHOD) {
-		mi_mark_method_applied(ps->master_instruments, instrument_id);
-	}
-	return 0;
-}
-
-static int perform_instrumentation_line(
-	struct prof_server *ps,
-	JNIEnv *jni_env,
-	struct class_info *ci_entry,
-	struct class_info *ci_exit,
-	const struct mi_entry *entry,
-	int profiler_id,
-	uint64_t instrument_id
-) {
-	int r = perform_instrumentation(
-		ps, jni_env, ci_entry, entry, profiler_id, instrument_id
-	);
-	if (r != 0) {
-		goto fail;
-	}
-
-	if (ci_exit != ci_entry) {
-		r = perform_instrumentation(
-			ps, jni_env, ci_exit, entry, profiler_id, instrument_id
-		);
-		if (r != 0) {
-			goto fail;
-		}
-	}
-	mi_mark_line_entry_applied(ps->master_instruments, instrument_id);
-	mi_mark_line_exit_applied(ps->master_instruments, instrument_id);
-
-	return 0;
-
-fail:
-	ci_remove_instrumented_line(ci_entry, entry->line.entry_line_number);
-	ci_remove_instrumented_line(ci_exit, entry->line.exit_line_number);
-	jni_remove_profiler(jni_env, profiler_id);
-	mi_remove(ps->master_instruments, instrument_id);
-	return -1;
-}
-
-static void undo_ci_and_mi(
-	const struct mi_entry *entry,
-	struct class_info *ci,
-	struct master_instruments *mi,
-	uint64_t instrument_id
-) {
-	uint64_t ignored_id;
-	ci_remove_instrumented_by_sig(
-		ci, (char *)entry->method.method_name->str, &ignored_id
-	);
-	mi_remove(mi, instrument_id);
-}
-
-static enum instrument_resp_status instrument_now(
-	struct prof_server *ps,
-	JNIEnv *jni_env,
-	struct class_info *ci,
-	uint64_t instrument_id,
-	int profiler_id
-) {
-	const struct mi_entry *entry = mi_find(
-		ps->master_instruments, instrument_id
-	);
-
-	int pop_ret = populate_class_info(
-		ci, entry, profiler_id, instrument_id
-	);
-
-	if (pop_ret != 0) {
-		jni_remove_profiler(jni_env, profiler_id);
-		mi_remove(ps->master_instruments, instrument_id);
-		return INSTRUMENT_RP_ERROR;
-	}
-
-	int instr_ret = perform_instrumentation(
-		ps, jni_env, ci, entry, profiler_id, instrument_id
-	);
-	if (instr_ret != 0) {
-		undo_ci_and_mi(entry, ci, ps->master_instruments, instrument_id);
-		jni_remove_profiler(jni_env, profiler_id);
-		return INSTRUMENT_RP_ERROR;
-	}
-
-	return INSTRUMENT_RP_OK;
-}
-
-static void do_deferred_method_instrumentation(
-	struct prof_server *ps,
-	JNIEnv *jni_env,
-	struct class_info *ci,
-	const struct queued_instr *qi
-) {
-	const char *method_sig = (char *)qi->method_sig->str;
-	enum instrument_resp_status status = instrument_now(
-		ps, jni_env, ci, qi->instrument_id, qi->profiler_id
-	);
-	if (status != INSTRUMENT_RP_OK) {
-		LOG_WARN(
-			"deferred instrumentation failed for %s %s",
-			(char *)ci->name->str, method_sig
-		);
-		prof_err_log_printf(
-			&ps->err_log,
-			"deferred instrumentation failed: %s %s",
-			(char *)ci->name->str, method_sig
-		);
-	}
-}
-
-static void do_deferred_instrumentations(
-	struct prof_server *ps,
-	JNIEnv *jni_env,
-	struct class_info *ci
-) {
-
-	while (true) {
-		int idx = queued_instr_list_find_by_class(
-			&ps->queued_instruments, (char *)ci->name->str
-		);
-		if(idx < 0) {
-			break;
-		}
-
-		struct queued_instr *qi = &ps->queued_instruments.arr[idx];
-		if (qi->type == QI_METHOD) {
-			do_deferred_method_instrumentation(
-				ps, jni_env, ci, qi
-			);
-		}
-		/* TODO: handle QI_LINE_ENTER / QI_LINE_EXIT */
-		queued_instr_list_remove_and_destroy(
-			&ps->queued_instruments, idx
-		);
-	}
 }
 
 static void handle_class_loaded(
@@ -442,10 +114,12 @@ static void handle_class_loaded(
 	ci = ci_alloc(name, bytecode, bytecode_len, &methods);
 	if (ci == NULL) {
 		method_list_deep_destroy(&methods);
-	} else if (ci_list_add(&ps->loaded_classes, ci) != 0) {
+	} else if (ci_list_add(&ps->instr_ctx.loaded_classes, ci) != 0) {
 		ci_free(ci);
 	} else {
-		do_deferred_instrumentations(ps, jni_env, ci);
+		ih_apply_deferred_instrumentations(
+			&ps->instr_ctx, jni_env, ps->jvmti, &ps->err_log, ci
+		);
 	}
 
 	ps_send_class_ev_dealloc(msg);
@@ -459,46 +133,13 @@ static void handle_usr_rq_instrument_method(
 	struct user_if_client *client = msg->body.usr_rq_instr_method.client;
 	const char *class_name = msg->body.usr_rq_instr_method.class_name;
 	const char *method_sig = msg->body.usr_rq_instr_method.method_sig;
-	enum instrument_resp_status status;
+	uint64_t instrument_id = 0;
 
-	struct mi_val miv = mi_add_method(
-		ps->master_instruments, class_name, class_name, method_sig
+	enum instrument_resp_status status = ih_instrument_method(
+		&ps->instr_ctx, jni_env, ps->jvmti, class_name, method_sig,
+		&instrument_id
 	);
-	uint64_t instrument_id = miv.id;
-	const struct mi_entry *entry = miv.entry;
 
-	if (instrument_id == 0) {
-		status = INSTRUMENT_RP_ERROR;
-		goto respond;
-	}
-
-	int profiler_id = create_profiler_for_method(
-		jni_env, entry, instrument_id
-	);
-	if (profiler_id < 0) {
-		mi_remove(ps->master_instruments, instrument_id);
-		status = profiler_id == -1 ?
-			INSTRUMENT_RP_DOUBLE_INSTRUMENT : INSTRUMENT_RP_ERROR;
-		goto respond;
-	}
-
-	struct class_info *ci = ci_list_find_by_name(
-		&ps->loaded_classes, class_name
-	);
-	if (ci == NULL) {
-		status = instrument_later(
-			ps, class_name, method_sig, instrument_id, profiler_id
-		);
-		if (status == INSTRUMENT_RP_ERROR) {
-			jni_remove_profiler(jni_env, profiler_id);
-		}
-	} else {
-		status = instrument_now(
-			ps, jni_env, ci, instrument_id, profiler_id
-		);
-	}
-
-respond:
 	uif_respond_instrument(ps->uif, client, status, instrument_id);
 	ps_usr_rq_instrument_method_dealloc(msg);
 }
@@ -513,14 +154,16 @@ void ps_handle_retransform(
 	unsigned char *buf;
 	jvmtiError err;
 
-	if (ps->pending.class_name == NULL) {
+	if (ps->instr_ctx.pending.class_name == NULL) {
 		return;
 	}
-	if (strcmp(name, (const char *)ps->pending.class_name) != 0) {
+	if (strcmp(name, (const char *)ps->instr_ctx.pending.class_name) != 0) {
 		return;
 	}
 
-	err = (*jvmti)->Allocate(jvmti, ps->pending.bytecode_len, &buf);
+	err = (*jvmti)->Allocate(
+		jvmti, ps->instr_ctx.pending.bytecode_len, &buf
+	);
 	if (err != JVMTI_ERROR_NONE) {
 		LOG_ERROR("Allocate failed in retransform");
 		return;
@@ -528,16 +171,16 @@ void ps_handle_retransform(
 
 	LOG_DEBUG(
 		"retransform hook fired for %s, bytecode_len=%zu",
-		name, ps->pending.bytecode_len
+		name, ps->instr_ctx.pending.bytecode_len
 	);
 
 	memcpy(
 		buf,
-		(const void *)ps->pending.bytecode,
-		ps->pending.bytecode_len
+		(const void *)ps->instr_ctx.pending.bytecode,
+		ps->instr_ctx.pending.bytecode_len
 	);
 	*new_class_data = buf;
-	*new_class_data_len = (jint)ps->pending.bytecode_len;
+	*new_class_data_len = (jint)ps->instr_ctx.pending.bytecode_len;
 }
 
 static void handle_usr_rq_get_stats(
@@ -574,279 +217,12 @@ static void handle_usr_rq_deinstrument_method(
 	struct user_if_client *client =
 		msg->body.usr_rq_deinstrument_method.client;
 
-	unsigned char *new_bc = NULL;
-	size_t new_bc_len;
-	enum deinstrument_resp_status resp_status = DEINSTRUMENT_RP_OK;
-	struct class_info *ci;
-	int profiler_id;
-	uint64_t ignored_id;
-
-	struct mi_val found = mi_find_method_by_name(
-		ps->master_instruments, class_name, method_sig
+	enum deinstrument_resp_status status = ih_deinstrument_method(
+		&ps->instr_ctx, jni_env, ps->jvmti, class_name, method_sig
 	);
-	if (found.entry == NULL) {
-		LOG_WARN(
-			"deinstrument: %s not found in %s", method_sig, class_name
-		);
-		resp_status = DEINSTRUMENT_RP_FAIL;
-		goto respond;
-	}
-	uint64_t instrument_id = found.id;
-	const struct mi_entry *entry = found.entry;
 
-	if (entry->method.deferred) {
-		int idx = queued_instr_list_find_by_instrument_id(
-			&ps->queued_instruments, instrument_id
-		);
-		if (idx >= 0) {
-			int deferred_profiler_id =
-				ps->queued_instruments.arr[idx].profiler_id;
-			queued_instr_list_remove_and_destroy(
-				&ps->queued_instruments, idx
-			);
-			if (jni_remove_profiler(jni_env, deferred_profiler_id) != 0) {
-				LOG_ERROR("jni_remove_profiler failed for deferred deinstrument");
-			}
-		}
-		mi_remove(ps->master_instruments, instrument_id);
-		goto respond;
-	}
-
-	ci = ci_list_find_by_name(&ps->loaded_classes, class_name);
-	if (ci == NULL) {
-		LOG_WARN("deinstrument: class not found: %s", class_name);
-		resp_status = DEINSTRUMENT_RP_FAIL;
-		goto respond;
-	}
-
-	profiler_id = ci_remove_instrumented_by_sig(
-		ci, method_sig, &ignored_id
-	);
-	if (profiler_id == -1) {
-		LOG_WARN(
-			"deinstrument: %s not instrumented in %s",
-			method_sig, class_name
-		);
-		resp_status = DEINSTRUMENT_RP_FAIL;
-		goto respond;
-	}
-
-	if (ci->instrumented.len > 0) {
-		new_bc = do_instrumentation(jni_env, ci, &new_bc_len);
-		if (new_bc == NULL) {
-			resp_status = DEINSTRUMENT_RP_FAIL;
-			goto cleanup_profiler;
-		}
-		if (retransform_pending(
-			ps, jni_env, class_name, NULL, new_bc, new_bc_len, -1
-		) != 0) {
-			LOG_ERROR("deinstrument retransform failed");
-			resp_status = DEINSTRUMENT_RP_FAIL;
-		}
-	} else {
-		if (retransform_pending(
-			ps, jni_env, class_name, NULL,
-			ci->bytecode, ci->bytecode_len, -1
-		) != 0) {
-			LOG_ERROR("deinstrument retransform failed");
-			resp_status = DEINSTRUMENT_RP_FAIL;
-		}
-	}
-
-cleanup_profiler:
-	mi_remove(ps->master_instruments, instrument_id);
-	if (jni_remove_profiler(jni_env, profiler_id) != 0) {
-		LOG_ERROR("jni_remove_profiler failed");
-	}
-
-respond:
-	free(new_bc);
-	uif_respond_deinstrument(ps->uif, client, resp_status);
+	uif_respond_deinstrument(ps->uif, client, status);
 	ps_usr_rq_deinstrument_method_dealloc(msg);
-}
-
-static enum deinstrument_resp_status deinstrument_line_by_id(
-	struct prof_server *ps,
-	JNIEnv *jni_env,
-	const struct mi_entry *entry,
-	uint64_t instrument_id
-) {
-	enum deinstrument_resp_status status = DEINSTRUMENT_RP_OK;
-	unsigned char *new_bc = NULL;
-	size_t new_bc_len;
-	int profiler_id = -1;
-
-	if (entry->line.entry_deferred) {
-		mi_remove(ps->master_instruments, instrument_id);
-		return DEINSTRUMENT_RP_OK;
-	}
-
-	struct class_info *ci_entry = ci_list_find_by_name(
-		&ps->loaded_classes, (char *)entry->entry_class_name->str
-	);
-	struct class_info *ci_exit = ci_list_find_by_name(
-		&ps->loaded_classes, (char *)entry->line.exit_class_name->str
-	);
-
-	if (ci_entry == NULL || ci_exit == NULL) {
-		LOG_WARN("deinstrument-by-id line: class not found");
-		return DEINSTRUMENT_RP_FAIL;
-	}
-
-	profiler_id = ci_remove_instrumented_line(
-		ci_entry, entry->line.entry_line_number
-	);
-	ci_remove_instrumented_line(ci_exit, entry->line.exit_line_number);
-
-	if (ci_entry->instrumented.len > 0 || ci_entry->lines.len > 0) {
-		new_bc = do_instrumentation(jni_env, ci_entry, &new_bc_len);
-		if (new_bc == NULL) {
-			status = DEINSTRUMENT_RP_FAIL;
-			goto cleanup;
-		}
-		retransform_pending(
-			ps, jni_env, (char *)ci_entry->name->str,
-			NULL, new_bc, new_bc_len, -1
-		);
-		free(new_bc);
-		new_bc = NULL;
-	} else {
-		retransform_pending(
-			ps, jni_env, (char *)ci_entry->name->str,
-			NULL, ci_entry->bytecode, ci_entry->bytecode_len, -1
-		);
-	}
-
-	if (ci_exit != ci_entry) {
-		if (ci_exit->instrumented.len > 0 || ci_exit->lines.len > 0) {
-			new_bc = do_instrumentation(
-				jni_env, ci_exit, &new_bc_len
-			);
-			if (new_bc == NULL) {
-				status = DEINSTRUMENT_RP_FAIL;
-				goto cleanup;
-			}
-			retransform_pending(
-				ps, jni_env, (char *)ci_exit->name->str,
-				NULL, new_bc, new_bc_len, -1
-			);
-			free(new_bc);
-			new_bc = NULL;
-		} else {
-			retransform_pending(
-				ps, jni_env, (char *)ci_exit->name->str,
-				NULL, ci_exit->bytecode,
-				ci_exit->bytecode_len, -1
-			);
-		}
-	}
-
-cleanup:
-	free(new_bc);
-	mi_remove(ps->master_instruments, instrument_id);
-	if (profiler_id >= 0) {
-		if(jni_remove_profiler(jni_env, profiler_id) != 0) {
-			LOG_ERROR(
-				"jni_remove_profiler failed for line "
-				"deinstrument"
-			);
-		}
-	}
-	return status;
-}
-
-static enum deinstrument_resp_status deinstrument_method_by_id(
-	struct prof_server *ps,
-	JNIEnv *jni_env,
-	const struct mi_entry *entry,
-	uint64_t instrument_id
-) {
-	enum deinstrument_resp_status status = DEINSTRUMENT_RP_OK;
-	struct class_info *ci;
-	unsigned char *new_bc = NULL;
-	size_t new_bc_len;
-	int profiler_id;
-	uint64_t ignored_id;
-
-	if (entry->method.deferred) {
-		int idx = queued_instr_list_find_by_instrument_id(
-			&ps->queued_instruments, instrument_id
-		);
-		if (idx >= 0) {
-			int deferred_profiler_id =
-				ps->queued_instruments.arr[idx].profiler_id;
-			queued_instr_list_remove_and_destroy(
-				&ps->queued_instruments, idx
-			);
-			int rm_ret = jni_remove_profiler(
-				jni_env, deferred_profiler_id
-			);
-			if (rm_ret != 0) {
-				LOG_ERROR(
-					"jni_remove_profiler failed for "
-					"deferred deinstrument-by-id"
-				);
-			}
-		}
-		mi_remove(ps->master_instruments, instrument_id);
-		return DEINSTRUMENT_RP_OK;
-	}
-
-	ci = ci_list_find_by_name(
-		&ps->loaded_classes, (char *)entry->entry_class_name->str
-	);
-	if (ci == NULL) {
-		LOG_WARN(
-			"deinstrument-by-id: class not found: %s",
-			(char *)entry->entry_class_name->str
-		);
-		return DEINSTRUMENT_RP_FAIL;
-	}
-
-	profiler_id = ci_remove_instrumented_by_sig(
-		ci, (char *)entry->method.method_name->str, &ignored_id
-	);
-	if (profiler_id == -1) {
-		LOG_WARN(
-			"deinstrument-by-id: not in instrumented list: %s %s",
-			(char *)entry->entry_class_name->str,
-			(char *)entry->method.method_name->str
-		);
-		return DEINSTRUMENT_RP_FAIL;
-	}
-
-	if (ci->instrumented.len > 0) {
-		new_bc = do_instrumentation(jni_env, ci, &new_bc_len);
-		if (new_bc == NULL) {
-			status = DEINSTRUMENT_RP_FAIL;
-			goto cleanup;
-		}
-		if (retransform_pending(
-			ps, jni_env,
-			(char *)entry->entry_class_name->str,
-			NULL, new_bc, new_bc_len, -1
-		) != 0) {
-			LOG_ERROR("deinstrument-by-id retransform failed");
-			status = DEINSTRUMENT_RP_FAIL;
-		}
-	} else {
-		if (retransform_pending(
-			ps, jni_env,
-			(char *)entry->entry_class_name->str,
-			NULL, ci->bytecode, ci->bytecode_len, -1
-		) != 0) {
-			LOG_ERROR("deinstrument-by-id retransform failed");
-			status = DEINSTRUMENT_RP_FAIL;
-		}
-	}
-
-cleanup:
-	free(new_bc);
-	mi_remove(ps->master_instruments, instrument_id);
-	if (jni_remove_profiler(jni_env, profiler_id) != 0) {
-		LOG_ERROR("jni_remove_profiler failed");
-	}
-	return status;
 }
 
 static void handle_usr_rq_deinstrument_by_id(
@@ -858,25 +234,14 @@ static void handle_usr_rq_deinstrument_by_id(
 		msg->body.usr_rq_deinstrument_by_id.instrument_id;
 	struct user_if_client *client =
 		msg->body.usr_rq_deinstrument_by_id.client;
-	enum deinstrument_resp_status resp_status;
-	const struct mi_entry *entry;
 
 	free(msg);
 
-	entry = mi_find(ps->master_instruments, instrument_id);
-	if (entry == NULL) {
-		resp_status = DEINSTRUMENT_RP_FAIL;
-	} else if (entry->type == MI_LINE) {
-		resp_status = deinstrument_line_by_id(
-			ps, jni_env, entry, instrument_id
-		);
-	} else {
-		resp_status = deinstrument_method_by_id(
-			ps, jni_env, entry, instrument_id
-		);
-	}
+	enum deinstrument_resp_status status = ih_deinstrument_by_id(
+		&ps->instr_ctx, jni_env, ps->jvmti, instrument_id
+	);
 
-	uif_respond_deinstrument_by_id(ps->uif, client, resp_status);
+	uif_respond_deinstrument_by_id(ps->uif, client, status);
 	uif_client_release(client);
 }
 
@@ -902,7 +267,9 @@ static void handle_usr_rq_list_instrumented(
 
 	free(msg);
 
-	uif_respond_list_instrumented(ps->uif, client, ps->master_instruments);
+	uif_respond_list_instrumented(
+		ps->uif, client, ps->instr_ctx.master_instruments
+	);
 	uif_client_release(client);
 }
 
@@ -934,7 +301,6 @@ static void handle_usr_rq_pause_threads(
 	uif_client_release(client);
 }
 
-
 static void handle_usr_rq_instrument_line(
 	struct prof_server *ps,
 	JNIEnv *jni_env,
@@ -948,76 +314,14 @@ static void handle_usr_rq_instrument_line(
 		msg->body.usr_rq_instrument_line.exit_class;
 	uint32_t entry_line = msg->body.usr_rq_instrument_line.entry_line;
 	uint32_t exit_line  = msg->body.usr_rq_instrument_line.exit_line;
-	enum instrument_line_resp_status status;
-	uint64_t instrument_id;
-	const struct mi_entry *entry;
-	struct class_info *ci_entry;
-	struct class_info *ci_exit;
-	int profiler_id = -1;
+	uint64_t instrument_id = 0;
 
-	struct mi_val miv = mi_add_linep(
-		ps->master_instruments,
-		entry_class, exit_class,
-		(int)entry_line, (int)exit_line
-	);
-	instrument_id = miv.id;
-	entry = miv.entry;
-
-	if (instrument_id == 0) {
-		status = INSTRUMENT_LINE_RP_ERROR;
-		goto respond;
-	}
-
-	ci_entry = ci_list_find_by_name(
-		&ps->loaded_classes, (char *)entry_class->str
-	);
-	ci_exit = ci_list_find_by_name(
-		&ps->loaded_classes, (char *)exit_class->str
+	enum instrument_line_resp_status status = ih_instrument_line(
+		&ps->instr_ctx, jni_env, ps->jvmti,
+		entry_class, exit_class, entry_line, exit_line,
+		&instrument_id
 	);
 
-	if (ci_entry == NULL || ci_exit == NULL) {
-		/* deferred path: stub — not yet implemented */
-		status = INSTRUMENT_LINE_RP_DEFERRED;
-		goto respond;
-	}
-
-	profiler_id = jni_create_line_profiler(
-		jni_env, instrument_id,
-		(char *)entry_class->str, (char *)exit_class->str,
-		(int)entry_line, (int)exit_line
-	);
-	if (profiler_id < 0) {
-		mi_remove(ps->master_instruments, instrument_id);
-		status = INSTRUMENT_LINE_RP_ERROR;
-		goto respond;
-	}
-
-	int pop_ret = populate_class_info_line(
-		ci_entry, ci_exit, entry, profiler_id
-	);
-	if (pop_ret != 0) {
-		jni_remove_profiler(jni_env, profiler_id);
-		mi_remove(ps->master_instruments, instrument_id);
-		status = INSTRUMENT_LINE_RP_ERROR;
-		goto respond;
-	}
-
-	int instr_ret = perform_instrumentation_line(
-		ps,
-		jni_env,
-		ci_entry,
-		ci_exit,
-		entry,
-		profiler_id,
-		instrument_id
-	);
-	if (instr_ret != 0) {
-		status = INSTRUMENT_LINE_RP_ERROR;
-	} else {
-		status = INSTRUMENT_LINE_RP_OK;
-	}
-
-respond:
 	uif_respond_instrument_line(ps->uif, client, status, instrument_id);
 	ps_usr_rq_instrument_line_dealloc(msg);
 }
@@ -1218,26 +522,16 @@ struct prof_server *ps_init(void)
 
 	ps->jvmti = NULL;
 	ps->thread_running = 0;
-	ps->pending = (struct pending_instrument){0};
 	ps->agent_thread = NULL;
 	ps->paused = prof_pause_on_start();
 	prof_err_log_init(&ps->err_log);
 
-	if (ci_list_init(&ps->loaded_classes) != 0) {
+	if (ih_ctx_init(&ps->instr_ctx) != 0) {
 		goto fail;
 	}
 
-	if (queued_instr_list_init(&ps->queued_instruments, 0) != 0) {
-		goto fail_classes;
-	}
-
-	ps->master_instruments = mi_alloc();
-	if (ps->master_instruments == NULL) {
-		goto fail_queued;
-	}
-
 	if (sem_init(&ps->shutdown_sem, 0, 0) != 0) {
-		goto fail_master;
+		goto fail_instr_ctx;
 	}
 
 	if (pthread_mutex_init(&ps->resume_mutex, NULL) != 0) {
@@ -1278,12 +572,8 @@ fail_mutex:
 	pthread_mutex_destroy(&ps->resume_mutex);
 fail_sem:
 	sem_destroy(&ps->shutdown_sem);
-fail_master:
-	mi_free(ps->master_instruments);
-fail_queued:
-	queued_instr_list_deep_destroy(&ps->queued_instruments);
-fail_classes:
-	ci_list_deep_destroy(&ps->loaded_classes);
+fail_instr_ctx:
+	ih_ctx_destroy(&ps->instr_ctx);
 fail:
 	free(ps);
 	return NULL;
@@ -1353,9 +643,7 @@ void ps_destroy(struct prof_server *ps)
 	uif_destroy(ps->uif);
 	ps_thread_pause_free(ps->thread_pause);
 
-	ci_list_deep_destroy(&ps->loaded_classes);
-	queued_instr_list_deep_destroy(&ps->queued_instruments);
-	mi_free(ps->master_instruments);
+	ih_ctx_destroy(&ps->instr_ctx);
 	prof_err_log_destroy(&ps->err_log);
 
 	pthread_cond_destroy(&ps->resume_cond);
