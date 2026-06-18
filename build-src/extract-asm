@@ -17,28 +17,19 @@
 # You should have received a copy of the GNU Lesser General Public License    #
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.       #
 ###############################################################################
+# Usage: extract-asm <asm-jar> <java-build-dir>
 set -e
 
-ASM_VERSION=9.10.1
-ASM_JAR=asm-${ASM_VERSION}.jar
-ASM_URL=https://repo1.maven.org/maven2/org/ow2/asm/asm/${ASM_VERSION}/${ASM_JAR}
-EXPECTED_SHA256=ed825d10ab1399c8c0cb669e688cf0c8c82629b4c8399b58352b68e92ca10fcb
+ASM_JAR="$1"
+JAVA_BUILD_DIR="$2"
 
-DEPS_DIR=build/deps
-JAR_PATH=${DEPS_DIR}/${ASM_JAR}
-
-mkdir -p "${DEPS_DIR}"
-
-if [ ! -f "${JAR_PATH}" ]; then
-	echo "Downloading ASM ${ASM_VERSION} from Maven Central..."
-	curl -fSL -o "${JAR_PATH}" "${ASM_URL}"
+if [ -n "${JAVA_HOME}" ]; then
+	JAR="${JAVA_HOME}/bin/jar"
+else
+	JAR=jar
 fi
 
-ACTUAL_SHA256=$(sha256sum "${JAR_PATH}" | awk '{print $1}')
-if [ "${ACTUAL_SHA256}" != "${EXPECTED_SHA256}" ]; then
-	echo "SHA256 mismatch for ${ASM_JAR}!" >&2
-	echo "  expected: ${EXPECTED_SHA256}" >&2
-	echo "  actual:   ${ACTUAL_SHA256}" >&2
-	rm -f "${JAR_PATH}"
-	exit 1
-fi
+ABS_JAR="$(readlink -f "${ASM_JAR}")"
+mkdir -p "${JAVA_BUILD_DIR}"
+(cd "${JAVA_BUILD_DIR}" && "${JAR}" xf "${ABS_JAR}" org/)
+find "${JAVA_BUILD_DIR}/org" -exec touch {} +

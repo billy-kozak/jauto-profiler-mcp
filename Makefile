@@ -57,6 +57,7 @@ JAVA_BUILD_DIR := build/java
 
 ASM_VERSION := 9.10.1
 ASM_JAR := $(BUILD_DIR)/deps/asm-$(ASM_VERSION).jar
+ASM_DEPS_MK := $(BUILD_DIR)/deps/asm-deps.mk
 
 OUTPUT_DIR := bin
 
@@ -162,7 +163,10 @@ java: $(JAR_FILE)
 $(ASM_JAR):
 	JAVA_HOME=$(JAVA_HOME) build-src/download-asm
 
-$(JAR_FILE): $(CLASS_FILES) $(ASM_JAR) $(OUTPUT_DIR)/.dir_dummy
+$(ASM_DEPS_MK): $(ASM_JAR)
+	build-src/gen-asm-deps $(ASM_JAR) $(JAVA_BUILD_DIR) $(JAR_FILE) $(MAKE) > $@
+
+$(JAR_FILE): $(CLASS_FILES) $(OUTPUT_DIR)/.dir_dummy
 	$(JAR) cf $@ -C $(JAVA_BUILD_DIR) .
 
 $(CLASS_FILES): $(JAVA_BUILD_DIR)/%.class: $(JSRC_ROOT)/%.java | $(ASM_JAR)
@@ -195,6 +199,7 @@ ifeq (,$(filter $(NO_DEPS_TARGETS), $(MAKECMDGOALS)))
 ifneq (n,$(findstring n,$(firstword $(MAKEFLAGS))))
 ifneq (p,$(findstring p,$(firstword $(MAKEFLAGS))))
 -include $(D_FILES)
+-include $(ASM_DEPS_MK)
 endif
 endif
 endif
