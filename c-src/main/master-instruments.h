@@ -57,6 +57,11 @@ struct mi_val {
 	const struct mi_entry *entry;
 };
 
+static inline bool mi_line_is_ready(const struct mi_entry *ent)
+{
+	return !ent->line.entry_deferred && !ent->line.exit_deferred;
+}
+
 struct master_instruments *mi_alloc(void);
 void mi_free(struct master_instruments *mi);
 

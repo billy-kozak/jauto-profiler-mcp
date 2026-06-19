@@ -32,6 +32,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
+#include <assert.h>
 
 #define LOG_TAG "instrument-handler"
 
@@ -386,6 +388,85 @@ static void do_deferred_method_instrumentation(
 	}
 }
 
+static void do_deferred_line_instrumentation(
+	struct instr_ctx *ctx,
+	JNIEnv *jni_env,
+	jvmtiEnv *jvmti,
+	struct prof_err_log *err_log,
+	const struct queued_instr *qi
+) {
+	uint64_t instrument_id = qi->instrument_id;
+	int profiler_id = qi->profiler_id;
+
+	if (qi->type == QI_LINE_ENTER) {
+		mi_mark_line_entry_applied(
+			ctx->master_instruments, instrument_id
+		);
+	} else {
+		mi_mark_line_exit_applied(
+			ctx->master_instruments, instrument_id
+		);
+	}
+
+	const struct mi_entry *entry = mi_find(
+		ctx->master_instruments, instrument_id
+	);
+	if (entry == NULL || !mi_line_is_ready(entry)) {
+		return;
+	}
+
+	struct class_info *ci_entry = ci_list_find_by_name(
+		&ctx->loaded_classes, (char *)entry->entry_class_name->str
+	);
+	struct class_info *ci_exit = ci_list_find_by_name(
+		&ctx->loaded_classes, (char *)entry->line.exit_class_name->str
+	);
+
+	if (ci_entry == NULL || ci_exit == NULL) {
+		LOG_WARN("deferred line instrumentation: class not found");
+		prof_err_log_printf(
+			err_log,
+			"deferred line instrumentation: class not found"
+		);
+		jni_remove_profiler(jni_env, profiler_id);
+		mi_remove(ctx->master_instruments, instrument_id);
+		return;
+	}
+
+	int pop_ret = populate_class_info_line(
+		ci_entry, ci_exit, entry, profiler_id
+	);
+	if (pop_ret != 0) {
+		LOG_WARN(
+			"deferred line instrumentation failed for %s %s",
+			(char *)entry->entry_class_name->str,
+			(char *)entry->line.exit_class_name->str
+		);
+		prof_err_log_printf(
+			err_log,
+			"deferred line instrumentation failed: %s %s",
+			(char *)entry->entry_class_name->str,
+			(char *)entry->line.exit_class_name->str
+		);
+		jni_remove_profiler(jni_env, profiler_id);
+		mi_remove(ctx->master_instruments, instrument_id);
+		return;
+	}
+
+	int instr_ret = perform_instrumentation_line(
+		ctx, jni_env, jvmti,
+		ci_entry, ci_exit, entry, profiler_id, instrument_id
+	);
+	if (instr_ret != 0) {
+		prof_err_log_printf(
+			err_log,
+			"deferred line instrumentation failed: %s %s",
+			(char *)entry->entry_class_name->str,
+			(char *)entry->line.exit_class_name->str
+		);
+	}
+}
+
 static void do_deferred_instrumentations(
 	struct instr_ctx *ctx,
 	JNIEnv *jni_env,
@@ -406,12 +487,55 @@ static void do_deferred_instrumentations(
 			do_deferred_method_instrumentation(
 				ctx, jni_env, jvmti, err_log, ci, qi
 			);
+		} else {
+			do_deferred_line_instrumentation(
+				ctx, jni_env, jvmti, err_log, qi
+			);
 		}
-		/* TODO: handle QI_LINE_ENTER / QI_LINE_EXIT */
 		queued_instr_list_remove_and_destroy(
 			&ctx->queued_instruments, idx
 		);
 	}
+}
+
+static int remove_queued_instr_by_id(
+	struct queued_instr_list *queue, uint64_t iid
+) {
+	int profiler_id = -1;
+	enum qi_type type;
+
+	int idx = queued_instr_list_find_by_instrument_id(queue, iid);
+
+	if(idx < 0) {
+		return -1;
+	}
+
+	profiler_id = queue->arr[idx].profiler_id;
+	type = queue->arr[idx].type;
+
+	queued_instr_list_remove_and_destroy(queue, idx);
+
+	if(type == QI_METHOD) {
+		assert(
+			queued_instr_list_find_by_instrument_id(queue, iid) < 0
+		);
+		return profiler_id;
+	}
+
+	idx = queued_instr_list_find_by_instrument_id(queue, iid);
+
+	if(idx < 0) {
+		return profiler_id;
+	}
+
+	assert(queue->arr[idx].profiler_id == profiler_id);
+	assert(queue->arr[idx].type != QI_METHOD);
+
+	queued_instr_list_remove_and_destroy(queue, idx);
+
+	assert(queued_instr_list_find_by_instrument_id(queue, iid) < 0);
+
+	return profiler_id;
 }
 
 static enum deinstrument_resp_status deinstrument_line_by_id(
@@ -426,7 +550,18 @@ static enum deinstrument_resp_status deinstrument_line_by_id(
 	size_t new_bc_len;
 	int profiler_id = -1;
 
-	if (entry->line.entry_deferred) {
+	if (!mi_line_is_ready(entry)) {
+		profiler_id = remove_queued_instr_by_id(
+			&ctx->queued_instruments, instrument_id
+		);
+		if (profiler_id >= 0) {
+			if (jni_remove_profiler(jni_env, profiler_id) != 0) {
+				LOG_ERROR(
+					"jni_remove_profiler failed for "
+					"deferred line deinstrument"
+				);
+			}
+		}
 		mi_remove(ctx->master_instruments, instrument_id);
 		return DEINSTRUMENT_RP_OK;
 	}
@@ -503,18 +638,13 @@ static enum deinstrument_resp_status deinstrument_method_by_id(
 	uint64_t ignored_id;
 
 	if (entry->method.deferred) {
-		int idx = queued_instr_list_find_by_instrument_id(
+		int deferred_profiler_id = remove_queued_instr_by_id(
 			&ctx->queued_instruments, instrument_id
 		);
-		if (idx >= 0) {
-			int deferred_profiler_id =
-				ctx->queued_instruments.arr[idx].profiler_id;
-			queued_instr_list_remove_and_destroy(
-				&ctx->queued_instruments, idx
-			);
+		if (deferred_profiler_id >= 0) {
 			int rm_ret = jni_remove_profiler(
 				jni_env, deferred_profiler_id
-			) ;
+			);
 			if (rm_ret != 0) {
 				LOG_ERROR(
 					"jni_remove_profiler failed for "
@@ -621,6 +751,59 @@ enum instrument_resp_status ih_instrument_method(
 	);
 }
 
+static enum instrument_line_resp_status instrument_later_line(
+	struct instr_ctx *ctx,
+	const struct mi_entry *entry,
+	int profiler_id,
+	uint64_t instrument_id,
+	bool entry_loaded,
+	bool exit_loaded
+) {
+	bool same_class = (strcmp(
+		(char *)entry->entry_class_name->str,
+		(char *)entry->line.exit_class_name->str
+	) == 0);
+
+	if (!entry_loaded) {
+		struct queued_instr *qi = queued_instr_line_add(
+			&ctx->queued_instruments,
+			(char *)entry->entry_class_name->str,
+			entry->line.entry_line_number,
+			profiler_id, instrument_id, QI_LINE_ENTER
+		);
+		if (qi == NULL || qi->class_name == NULL) {
+			goto fail;
+		}
+	} else {
+		mi_mark_line_entry_applied(
+			ctx->master_instruments, instrument_id
+		);
+	}
+
+	if (!exit_loaded && !same_class) {
+		struct queued_instr *qi = queued_instr_line_add(
+			&ctx->queued_instruments,
+			(char *)entry->line.exit_class_name->str,
+			entry->line.exit_line_number,
+			profiler_id, instrument_id, QI_LINE_EXIT
+		);
+		if (qi == NULL || qi->class_name == NULL) {
+			goto fail;
+		}
+	} else {
+		mi_mark_line_exit_applied(
+			ctx->master_instruments, instrument_id
+		);
+	}
+
+	return INSTRUMENT_LINE_RP_DEFERRED;
+
+fail:
+	remove_queued_instr_by_id(&ctx->queued_instruments, instrument_id);
+	mi_remove(ctx->master_instruments, instrument_id);
+	return INSTRUMENT_LINE_RP_ERROR;
+}
+
 enum instrument_line_resp_status ih_instrument_line(
 	struct instr_ctx *ctx,
 	JNIEnv *jni_env,
@@ -652,11 +835,6 @@ enum instrument_line_resp_status ih_instrument_line(
 		&ctx->loaded_classes, (char *)exit_class->str
 	);
 
-	if (ci_entry == NULL || ci_exit == NULL) {
-		/* deferred path: stub — not yet implemented */
-		return INSTRUMENT_LINE_RP_DEFERRED;
-	}
-
 	int profiler_id = jni_create_line_profiler(
 		jni_env, instrument_id,
 		(char *)entry_class->str, (char *)exit_class->str,
@@ -665,6 +843,17 @@ enum instrument_line_resp_status ih_instrument_line(
 	if (profiler_id < 0) {
 		mi_remove(ctx->master_instruments, instrument_id);
 		return INSTRUMENT_LINE_RP_ERROR;
+	}
+
+	if (ci_entry == NULL || ci_exit == NULL) {
+		enum instrument_line_resp_status stat = instrument_later_line(
+			ctx, entry, profiler_id, instrument_id,
+			ci_entry != NULL, ci_exit != NULL
+		);
+		if (stat == INSTRUMENT_LINE_RP_ERROR) {
+			jni_remove_profiler(jni_env, profiler_id);
+		}
+		return stat;
 	}
 
 	int pop_ret = populate_class_info_line(

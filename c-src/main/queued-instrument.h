@@ -53,6 +53,14 @@ struct queued_instr *queued_instr_method_add(
 	int profiler_id,
 	uint64_t instrument_id
 );
+struct queued_instr *queued_instr_line_add(
+	struct queued_instr_list *arr,
+	const char *class_name,
+	int line_number,
+	int profiler_id,
+	uint64_t instrument_id,
+	enum qi_type type
+);
 void queued_instr_list_remove_and_destroy(
 	struct queued_instr_list *arr, int index
 );

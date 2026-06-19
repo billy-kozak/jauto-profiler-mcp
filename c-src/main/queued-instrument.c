@@ -44,6 +44,21 @@ static void queued_instr_method_init(
 	qi->method_sig = pstring_from_cstr(method_sig);
 }
 
+static void queued_instr_line_init(
+	struct queued_instr *qi,
+	const char *class_name,
+	int line_number,
+	int profiler_id,
+	uint64_t instrument_id,
+	enum qi_type type
+) {
+	qi->type = type;
+	qi->instrument_id = instrument_id;
+	qi->profiler_id = profiler_id;
+	qi->class_name = pstring_from_cstr(class_name);
+	qi->line_number = line_number;
+}
+
 static void queued_instr_destroy(struct queued_instr *qi)
 {
 	free(qi->class_name);
@@ -64,6 +79,26 @@ struct queued_instr *queued_instr_method_add(
 	if (qi != NULL) {
 		queued_instr_method_init(
 			qi, class_name, method_sig, profiler_id, instrument_id
+		);
+	}
+
+	return qi;
+}
+
+struct queued_instr *queued_instr_line_add(
+	struct queued_instr_list *arr,
+	const char *class_name,
+	int line_number,
+	int profiler_id,
+	uint64_t instrument_id,
+	enum qi_type type
+) {
+	struct queued_instr *qi = queued_instr_list_add(arr);
+
+	if (qi != NULL) {
+		queued_instr_line_init(
+			qi, class_name, line_number,
+			profiler_id, instrument_id, type
 		);
 	}
 
