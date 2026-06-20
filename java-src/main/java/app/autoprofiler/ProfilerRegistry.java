@@ -127,6 +127,20 @@ public class ProfilerRegistry {
         }
     }
 
+    public static void enterLine(int id) {
+        ProfilerEntry entry = INSTANCE.entries.get(id);
+        if (entry.profiler.active) {
+            entry.profiler.enterLine();
+        }
+    }
+
+    public static void exitLine(int id) {
+        ProfilerEntry entry = INSTANCE.entries.get(id);
+        if (entry.profiler.active) {
+            entry.profiler.exitLine();
+        }
+    }
+
     private void collect() {
         while (!Thread.currentThread().isInterrupted()) {
             try {

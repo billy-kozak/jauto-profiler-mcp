@@ -32,6 +32,9 @@ public class Profiler {
     /* [0] = re-entry depth, [1] = System.nanoTime() at outermost entry */
     private final ThreadLocal<long[]> threadState = ThreadLocal.withInitial(() -> new long[2]);
 
+    /* [0] = active flag (1=seen entry, 0=not), [1] = System.nanoTime() at entry */
+    private final ThreadLocal<long[]> lineState = ThreadLocal.withInitial(() -> new long[2]);
+
     public Profiler(long instrumentId, String name) {
         this.instrumentId = instrumentId;
         this.name = name;
@@ -52,6 +55,21 @@ public class Profiler {
         if (state[0] == 0) {
             totalNanos.add(System.nanoTime() - state[1]);
             callCount.increment();
+        }
+    }
+
+    public void enterLine() {
+        long[] state = lineState.get();
+        state[0] = 1;
+        state[1] = System.nanoTime();
+    }
+
+    public void exitLine() {
+        long[] state = lineState.get();
+        if (state[0] == 1) {
+            totalNanos.add(System.nanoTime() - state[1]);
+            callCount.increment();
+            state[0] = 0;
         }
     }
 

@@ -54,8 +54,8 @@ void instrumented_method_list_deep_destroy(
 );
 
 enum instrument_type {
-	INSTRUMENT_ENTER,
-	INSTRUMENT_EXIT
+	INSTRUMENT_ENTER = 0,
+	INSTRUMENT_EXIT = 1
 };
 
 struct instrumented_line {
@@ -103,6 +103,7 @@ struct class_instrument_params {
 	int *profiler_ids;
 	int count;
 	int *line_numbers;
+	int *line_types;
 	int *line_profiler_ids;
 	int line_count;
 };

@@ -88,6 +88,7 @@ static unsigned char *do_instrumentation(
 		params->method_sigs,
 		params->profiler_ids, params->count,
 		params->line_numbers,
+		params->line_types,
 		params->line_profiler_ids, params->line_count,
 		new_bc_len_out
 	);

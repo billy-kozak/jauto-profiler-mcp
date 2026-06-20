@@ -24,7 +24,9 @@ import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 class BytecodeTransformer {
@@ -36,17 +38,20 @@ class BytecodeTransformer {
         String[] methodSigs,
         int[] methodProfilerIds,
         int[] lineNumbers,
+        int[] lineTypes,
         int[] lineProfilerIds
     ) {
 
         Map<String, MethodInstrument> methodInstruments = new HashMap<>();
-        Map<Integer, LineInstrument> lineInstruments = new HashMap<>();
+        Map<Integer, List<LineInstrument>> lineInstruments = new HashMap<>();
 
         for(int i = 0; i < methodSigs.length; i++) {
-            methodInstruments.put(methodSigs[i], new MethodInstrument(methodSigs[i], methodProfilerIds[i]));
+            methodInstruments.put(methodSigs[i], new MethodInstrument(methodProfilerIds[i]));
         }
         for(int i = 0; i < lineNumbers.length; i++) {
-            lineInstruments.put(lineNumbers[i], new LineInstrument(lineNumbers[i], lineProfilerIds[i]));
+            lineInstruments
+                .computeIfAbsent(lineNumbers[i], k -> new ArrayList<>())
+                .add(new LineInstrument(InstrumentType.fromCode(lineTypes[i]), lineProfilerIds[i]));
         }
 
         ClassReader cr = new ClassReader(classBytes);
@@ -54,7 +59,13 @@ class BytecodeTransformer {
         InstrumentingVisitor iv = new InstrumentingVisitor(cw, methodInstruments, lineInstruments);
         cr.accept(iv, ClassReader.SKIP_FRAMES);
 
-        if (iv.matchedCount < methodInstruments.size()) {
+        int totalLineInstruments = 0;
+        for(List<LineInstrument> list : lineInstruments.values()) {
+            totalLineInstruments += list.size();
+        }
+        int expectedInstruments = methodInstruments.size() + totalLineInstruments;
+
+        if (iv.matchedCount < expectedInstruments) {
             return null;
         }
         return cw.toByteArray();
@@ -85,13 +96,13 @@ class BytecodeTransformer {
     private static class InstrumentingVisitor extends ClassVisitor {
 
         private final Map<String, MethodInstrument> methodInstruments;
-        private final Map<Integer, LineInstrument> lineInstruments;
+        private final Map<Integer, List<LineInstrument>> lineInstruments;
         int matchedCount = 0;
 
         InstrumentingVisitor(
             ClassVisitor cv,
             Map<String, MethodInstrument> methodInstruments,
-            Map<Integer, LineInstrument> lineInstruments
+            Map<Integer, List<LineInstrument>> lineInstruments
         ) {
             super(Opcodes.ASM9, cv);
             this.methodInstruments = methodInstruments;
@@ -113,28 +124,99 @@ class BytecodeTransformer {
             MethodInstrument instr = methodInstruments.get(sig);
 
             if(instr != null) {
-                    matchedCount++;
-                    return new InstrumentingAdapter(mv, instr.profilerId);
+                return new MethodInstrumentingAdapter(mv, this::countMatch, instr.profilerId, lineInstruments);
             } else {
-                return mv;
+                return new LineInstrumentingAdapter(mv, this::countMatch, lineInstruments);
+            }
+        }
+
+        private void countMatch() {
+            matchedCount++;
+        }
+    }
+
+
+    private static abstract class InstrumentingAdapter extends MethodVisitor {
+
+        public  InstrumentingAdapter(int api, MethodVisitor mv) {
+            super(api, mv);
+        }
+
+        protected void pushInt(int value) {
+            if (value >= -1 && value <= 5) {
+                visitInsn(Opcodes.ICONST_0 + value);
+            } else if (value >= Byte.MIN_VALUE && value <= Byte.MAX_VALUE) {
+                visitIntInsn(Opcodes.BIPUSH, value);
+            } else if (value >= Short.MIN_VALUE && value <= Short.MAX_VALUE) {
+                visitIntInsn(Opcodes.SIPUSH, value);
+            } else {
+                visitLdcInsn(value);
             }
         }
     }
 
-    private static class InstrumentingAdapter extends MethodVisitor {
+    private static class LineInstrumentingAdapter extends InstrumentingAdapter {
+        private final Map<Integer, List<LineInstrument>> lineInstruments;
+        private final Runnable countMatch;
+
+        LineInstrumentingAdapter(MethodVisitor mv, Runnable countMatch, Map<Integer, List<LineInstrument>> lineInstruments) {
+            super(Opcodes.ASM9, mv);
+            this.lineInstruments = lineInstruments;
+            this.countMatch = countMatch;
+        }
+
+        @Override
+        public void visitLineNumber(int line, Label start) {
+            List<LineInstrument> instruments = lineInstruments.get(line);
+
+            super.visitLineNumber(line, start);
+            if(instruments != null) {
+                for(LineInstrument i : instruments) {
+                    if(i.type == InstrumentType.INSTRUMENT_ENTER) {
+                        emitEnterLine(i.profilerId);
+                    } else {
+                        emitExitLine(i.profilerId);
+                    }
+                    if(i.mark()) {
+                        countMatch.run();
+                    }
+                }
+            }
+        }
+
+        private void emitEnterLine(int profilerId) {
+            pushInt(profilerId);
+            visitMethodInsn(
+                Opcodes.INVOKESTATIC, REGISTRY, "enterLine", "(I)V", false
+            );
+        }
+
+        private void emitExitLine(int profilerId) {
+            pushInt(profilerId);
+            visitMethodInsn(
+                Opcodes.INVOKESTATIC, REGISTRY, "exitLine", "(I)V", false
+            );
+        }
+    }
+
+    private static class MethodInstrumentingAdapter extends LineInstrumentingAdapter {
 
         private final int profilerId;
-        private Label startFinally;
+        private final Label startFinally;
 
-        InstrumentingAdapter(MethodVisitor mv, int profilerId) {
-            super(Opcodes.ASM9, mv);
+        MethodInstrumentingAdapter(
+                MethodVisitor mv, Runnable countMatch, int profilerId, Map<Integer, List<LineInstrument>> lineInstruments
+        ) {
+            super(mv, countMatch, lineInstruments);
             this.profilerId = profilerId;
+            this.startFinally = new Label();
+
+            countMatch.run();
         }
 
         @Override
         public void visitCode() {
             super.visitCode();
-            startFinally = new Label();
             visitLabel(startFinally);
             emitEnter();
         }
@@ -182,49 +264,48 @@ class BytecodeTransformer {
                 Opcodes.INVOKESTATIC, REGISTRY, "exit", "(I)V", false
             );
         }
-
-        /*
-         * ICONST_M1..ICONST_5 opcodes are consecutive starting at ICONST_0-1,
-         * so ICONST_0 + value gives the right opcode for values in [-1, 5].
-         */
-        private void pushInt(int value) {
-            if (value >= -1 && value <= 5) {
-                visitInsn(Opcodes.ICONST_0 + value);
-            } else if (value >= Byte.MIN_VALUE && value <= Byte.MAX_VALUE) {
-                visitIntInsn(Opcodes.BIPUSH, value);
-            } else if (value >= Short.MIN_VALUE && value <= Short.MAX_VALUE) {
-                visitIntInsn(Opcodes.SIPUSH, value);
-            } else {
-                visitLdcInsn(value);
-            }
-        }
     }
 
+
     private static class MethodInstrument {
-        public final String methodName;
-        public final String methodDesc;
         public final int profilerId;
 
-        public MethodInstrument(String sig, int id) {
-            int colon = sig.indexOf(':');
-
-            if(colon < 0) {
-                throw new IllegalArgumentException("Invalid method signature: " + sig);
-            }
-
-            methodName = sig.substring(0, colon);
-            methodDesc = sig.substring(colon + 1);
+        public MethodInstrument(int id) {
             profilerId = id;
         }
     }
 
     private static class LineInstrument {
-        public final int line;
         public final int profilerId;
+        public final InstrumentType type;
+        private boolean markFlag;
 
-        public LineInstrument(int line, int profilerId) {
-            this.line = line;
+        public LineInstrument(InstrumentType type, int profilerId) {
+            this.type = type;
             this.profilerId = profilerId;
+            this.markFlag = false;
+        }
+
+        public boolean mark() {
+            boolean ret = !markFlag;
+            markFlag = true;
+            return ret;
+        }
+    }
+
+    private enum InstrumentType {
+        INSTRUMENT_ENTER,
+        INSTRUMENT_EXIT;
+
+        public static InstrumentType fromCode(int code) {
+            switch(code) {
+                case(0):
+                    return INSTRUMENT_ENTER;
+                case(1):
+                    return INSTRUMENT_EXIT;
+                default:
+                    throw new IllegalArgumentException("Invalid instrument type code " + code);
+            }
         }
     }
 }

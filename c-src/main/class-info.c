@@ -214,6 +214,7 @@ struct class_instrument_params *class_instrument_params_alloc(
 	p->method_sigs = NULL;
 	p->profiler_ids = NULL;
 	p->line_numbers = NULL;
+	p->line_types = NULL;
 	p->line_profiler_ids = NULL;
 
 	p->method_sigs = malloc((size_t)count * sizeof(*p->method_sigs));
@@ -230,14 +231,20 @@ struct class_instrument_params *class_instrument_params_alloc(
 
 	if (line_count > 0) {
 		p->line_numbers = malloc((size_t)line_count * sizeof(*p->line_numbers));
+		p->line_types = malloc((size_t)line_count * sizeof(*p->line_types));
 		p->line_profiler_ids = malloc(
 			(size_t)line_count * sizeof(*p->line_profiler_ids)
 		);
-		if (p->line_numbers == NULL || p->line_profiler_ids == NULL) {
+		if (
+			p->line_numbers == NULL ||
+			p->line_types == NULL ||
+			p->line_profiler_ids == NULL
+		) {
 			goto fail;
 		}
 		for (i = 0; i < (size_t)line_count; i++) {
 			p->line_numbers[i] = ci->lines.arr[i].line_number;
+			p->line_types[i] = (int)ci->lines.arr[i].type;
 			p->line_profiler_ids[i] = ci->lines.arr[i].profiler_id;
 		}
 	}
@@ -257,6 +264,7 @@ void class_instrument_params_free(struct class_instrument_params *params)
 	free(params->method_sigs);
 	free(params->profiler_ids);
 	free(params->line_numbers);
+	free(params->line_types);
 	free(params->line_profiler_ids);
 	free(params);
 }
