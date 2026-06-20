@@ -471,7 +471,6 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 static void JNICALL event_loop(jvmtiEnv *jvmti_env, JNIEnv *jni_env, void *arg)
 {
 	struct prof_server *ps = arg;
-	jthread cur_thread = NULL;
 	void *msg;
 
 	if (jni_profiler_init_refs(jni_env) != 0) {
@@ -484,15 +483,6 @@ static void JNICALL event_loop(jvmtiEnv *jvmti_env, JNIEnv *jni_env, void *arg)
 		LOG_ERROR("bc_instrument_init_refs failed");
 		sem_post(&ps->shutdown_sem);
 		return;
-	}
-	jvmtiError err = (*jvmti_env)->GetCurrentThread(
-		jvmti_env, &cur_thread
-	);
-
-	if (err == JVMTI_ERROR_NONE) {
-		ps->agent_thread = (*jni_env)->NewGlobalRef(
-			jni_env, cur_thread
-		);
 	}
 	LOG_INFO("startup: agent_thread=%p", (void *)ps->agent_thread);
 
@@ -613,6 +603,7 @@ struct prof_server *ps_start(
 		return NULL;
 	}
 
+	ps->agent_thread = (*jni_env)->NewGlobalRef(jni_env, thread);
 	ps->thread_running = 1;
 	return ps;
 }
