@@ -29,7 +29,7 @@ cat > "$OUTPUT" <<EOF
 <classpath>
 	<classpathentry kind="src" path="${JSRC_ROOT}"/>
 	<classpathentry kind="lib" path="${ASM_JAR}"/>
-	<classpathentry kind="output" path="${JAVA_BUILD_DIR}"/>
+	<classpathentry kind="output" path=".workspace/${JAVA_BUILD_DIR}"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 </classpath>
 EOF

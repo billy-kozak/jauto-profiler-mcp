@@ -29,7 +29,7 @@ JAVA_HOME = $(shell build-src/find-java-home)
 JAVA_INC = -I$(JAVA_HOME)/include -I$(JAVA_HOME)/include/linux
 
 JAVAC := $(JAVA_HOME)/bin/javac
-JAVACFLAGS = -g -cp $(ASM_JAR)
+JAVACFLAGS = -Xlint:all -g -cp $(ASM_JAR)
 JAR := $(JAVA_HOME)/bin/jar
 
 LIBS := -lpthread
@@ -70,6 +70,9 @@ CSRC_DIRS = $(shell find $(CSRC_ROOT) -type d)
 
 CSRC_MAIN = c-src/main
 
+JSRC_ROOT = java-src/main/java
+JSRC_DIR = $(shell find $(JSRC_ROOT) -type d)
+
 BUILDSRC_ROOT = build-src
 PYSRC_ROOT = py-src
 
@@ -87,7 +90,6 @@ C_FILES = $(shell find $(CSRC_MAIN) -name "*.c")
 O_FILES = $(C_FILES:$(CSRC_ROOT)/%.c=$(OBJ_DIR)/%.o)
 D_FILES = $(C_FILES:$(CSRC_ROOT)/%.c=$(DEP_DIR)/%.d)
 
-JSRC_ROOT = java-src/main/java
 JAVA_FILES = $(shell find $(JSRC_ROOT) -name "*.java")
 CLASS_FILES = $(JAVA_FILES:$(JSRC_ROOT)/%.java=$(JAVA_BUILD_DIR)/%.class)
 
@@ -100,6 +102,7 @@ SKILL_DOC = docs/SKILL.md
 DIST_README = docs/dist-README.md
 
 vpath %.c $(CSRC_DIRS)
+vpath %.java $(JSRC_DIRS)
 
 INC = $(JAVA_INC) -I$(CSRC_MAIN)
 
