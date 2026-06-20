@@ -47,13 +47,19 @@ endif
 
 CFLAGS += -Wall -fvisibility=hidden -fPIC -ffunction-sections
 LDFLAGS += -Wall -shared -fPIC -Wl,--gc-sections
+
+MUSL_HOME ?= build/libc/musl-install
+MUSL_INC := $(MUSL_HOME)/include
+MUSL_LIBC := $(MUSL_HOME)/lib/libc.a
+COMPILER_INC := $(shell $(CC) -print-file-name=include)
 ###############################################################################
 #                                 BUILD DIRS                                  #
 ###############################################################################
 BUILD_DIR := build
 OBJ_DIR := build/c/obj
-DEP_DIR := build/c/deps
+CD_DIR := build/c/deps
 JAVA_BUILD_DIR := build/java
+DEP_DIR := build/deps/
 
 ASM_VERSION := 9.10.1
 ASM_JAR := $(BUILD_DIR)/deps/asm-$(ASM_VERSION).jar
@@ -88,7 +94,7 @@ OUT_DIST := $(DIST_DIR)/jauto-prof.tar.gz
 
 C_FILES = $(shell find $(CSRC_MAIN) -name "*.c")
 O_FILES = $(C_FILES:$(CSRC_ROOT)/%.c=$(OBJ_DIR)/%.o)
-D_FILES = $(C_FILES:$(CSRC_ROOT)/%.c=$(DEP_DIR)/%.d)
+D_FILES = $(C_FILES:$(CSRC_ROOT)/%.c=$(CD_DIR)/%.d)
 
 JAVA_FILES = $(shell find $(JSRC_ROOT) -name "*.java")
 CLASS_FILES = $(JAVA_FILES:$(JSRC_ROOT)/%.java=$(JAVA_BUILD_DIR)/%.class)
@@ -106,17 +112,17 @@ vpath %.java $(JSRC_DIRS)
 
 INC = $(JAVA_INC) -I$(CSRC_MAIN)
 
-CLEAN_FILES += $(wildcard $(BUILD_DIR)/*)
+CLEAN_FILES += $(OBJ_DIR) $(CD_DIR) $(JAVA_BUILD_DIR) $(DIST_DIR) $(DEP_DIR)
 CLEAN_FILES += $(wildcard $(OUTPUT_DIR)/*)
 ###############################################################################
 #                                   MACROS                                    #
 ###############################################################################
 define d_to_o
-$(patsubst $(DEP_DIR)/%.d,$(OBJ_DIR)/%.o,$(1))
+$(patsubst $(CD_DIR)/%.d,$(OBJ_DIR)/%.o,$(1))
 endef
 
 define d_to_c
-$(patsubst $(DEP_DIR)/%.d,$(OBJ_DIR)/%.c,$(1))
+$(patsubst $(CD_DIR)/%.d,$(OBJ_DIR)/%.c,$(1))
 endef
 
 define prefix_inst
@@ -138,9 +144,15 @@ debug: CFLAGS +=-O0
 debug: LDFLAGS += -O0
 debug: shared java test
 
+musl-linked: CFLAGS += -Os -flto=auto -DNDEBUG
+musl-linked: CFLAGS += -nostdinc -isystem $(MUSL_INC) -isystem $(COMPILER_INC)
+musl-linked: LDFLAGS += -Os -flto=auto -nostdlib
+musl-linked: LIBS := $(MUSL_LIBC) -lgcc
+musl-linked: shared
+
 shared: $(D_FILES) $(OUT_LIB)
 
-$(D_FILES): $(DEP_DIR)/%.d: $(CSRC_ROOT)/%.c
+$(D_FILES): $(CD_DIR)/%.d: $(CSRC_ROOT)/%.c
 	@mkdir -p $(dir $(@))
 	$(CC) $(INC) -MF $@ -M -MT "$(call d_to_o,$(@))" $<
 
@@ -167,14 +179,16 @@ $(ASM_JAR):
 	JAVA_HOME=$(JAVA_HOME) build-src/download-asm
 
 $(ASM_DEPS_MK): $(ASM_JAR)
-	build-src/gen-asm-deps $(ASM_JAR) $(JAVA_BUILD_DIR) $(JAR_FILE) $(MAKE) > $@
+	build-src/gen-asm-deps \
+		$(ASM_JAR) $(JAVA_BUILD_DIR) $(JAR_FILE) $(MAKE) > $@
 
 $(JAR_FILE): $(CLASS_FILES) $(OUTPUT_DIR)/.dir_dummy
 	$(JAR) cf $@ -C $(JAVA_BUILD_DIR) .
 
 $(CLASS_FILES): $(JAVA_BUILD_DIR)/%.class: $(JSRC_ROOT)/%.java | $(ASM_JAR)
 	@mkdir -p $(dir $(@))
-	$(JAVAC) $(JAVACFLAGS) -d $(JAVA_BUILD_DIR) -sourcepath $(JSRC_ROOT) $<
+	$(JAVAC) $(JAVACFLAGS) \
+		-d $(JAVA_BUILD_DIR) -sourcepath $(JSRC_ROOT) $<
 
 $(OUT_DIST): COPYING COPYING.LESSER $(MCP_DIST)
 $(OUT_DIST): $(BIN_FILES) $(PYSRC_FILES) $(SETUP_DIST)
