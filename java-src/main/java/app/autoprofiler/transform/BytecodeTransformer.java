@@ -24,6 +24,8 @@ import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
+import java.util.HashMap;
+import java.util.Map;
 
 class BytecodeTransformer {
 
@@ -32,24 +34,27 @@ class BytecodeTransformer {
     static byte[] transform(
         byte[] classBytes,
         String[] methodSigs,
-        int[] profilerIds,
+        int[] methodProfilerIds,
         int[] lineNumbers,
         int[] lineProfilerIds
     ) {
-        String[] methodNames = new String[methodSigs.length];
-        String[] methodDescs = new String[methodSigs.length];
-        for (int i = 0; i < methodSigs.length; i++) {
-            int colon = methodSigs[i].indexOf(':');
-            methodNames[i] = methodSigs[i].substring(0, colon);
-            methodDescs[i] = methodSigs[i].substring(colon + 1);
+
+        Map<String, MethodInstrument> methodInstruments = new HashMap<>();
+        Map<Integer, LineInstrument> lineInstruments = new HashMap<>();
+
+        for(int i = 0; i < methodSigs.length; i++) {
+            methodInstruments.put(methodSigs[i], new MethodInstrument(methodSigs[i], methodProfilerIds[i]));
         }
+        for(int i = 0; i < lineNumbers.length; i++) {
+            lineInstruments.put(lineNumbers[i], new LineInstrument(lineNumbers[i], lineProfilerIds[i]));
+        }
+
         ClassReader cr = new ClassReader(classBytes);
         ClassWriter cw = new SafeClassWriter(cr, ClassWriter.COMPUTE_FRAMES);
-        InstrumentingVisitor iv = new InstrumentingVisitor(
-            cw, methodNames, methodDescs, profilerIds
-        );
+        InstrumentingVisitor iv = new InstrumentingVisitor(cw, methodInstruments, lineInstruments);
         cr.accept(iv, ClassReader.SKIP_FRAMES);
-        if (iv.matchedCount < profilerIds.length) {
+
+        if (iv.matchedCount < methodInstruments.size()) {
             return null;
         }
         return cw.toByteArray();
@@ -79,21 +84,18 @@ class BytecodeTransformer {
 
     private static class InstrumentingVisitor extends ClassVisitor {
 
-        private final String[] targetNames;
-        private final String[] targetDescs;
-        private final int[] profilerIds;
+        private final Map<String, MethodInstrument> methodInstruments;
+        private final Map<Integer, LineInstrument> lineInstruments;
         int matchedCount = 0;
 
         InstrumentingVisitor(
             ClassVisitor cv,
-            String[] targetNames,
-            String[] targetDescs,
-            int[] profilerIds
+            Map<String, MethodInstrument> methodInstruments,
+            Map<Integer, LineInstrument> lineInstruments
         ) {
             super(Opcodes.ASM9, cv);
-            this.targetNames = targetNames;
-            this.targetDescs = targetDescs;
-            this.profilerIds = profilerIds;
+            this.methodInstruments = methodInstruments;
+            this.lineInstruments = lineInstruments;
         }
 
         @Override
@@ -107,13 +109,15 @@ class BytecodeTransformer {
             MethodVisitor mv = super.visitMethod(
                 access, name, descriptor, signature, exceptions
             );
-            for (int i = 0; i < targetNames.length; i++) {
-                if (name.equals(targetNames[i]) && descriptor.equals(targetDescs[i])) {
+            String sig = name + ":" + signature;
+            MethodInstrument instr = methodInstruments.get(sig);
+
+            if(instr != null) {
                     matchedCount++;
-                    return new InstrumentingAdapter(mv, profilerIds[i]);
-                }
+                    return new InstrumentingAdapter(mv, instr.profilerId);
+            } else {
+                return mv;
             }
-            return mv;
         }
     }
 
@@ -193,6 +197,34 @@ class BytecodeTransformer {
             } else {
                 visitLdcInsn(value);
             }
+        }
+    }
+
+    private static class MethodInstrument {
+        public final String methodName;
+        public final String methodDesc;
+        public final int profilerId;
+
+        public MethodInstrument(String sig, int id) {
+            int colon = sig.indexOf(':');
+
+            if(colon < 0) {
+                throw new IllegalArgumentException("Invalid method signature: " + sig);
+            }
+
+            methodName = sig.substring(0, colon);
+            methodDesc = sig.substring(colon + 1);
+            profilerId = id;
+        }
+    }
+
+    private static class LineInstrument {
+        public final int line;
+        public final int profilerId;
+
+        public LineInstrument(int line, int profilerId) {
+            this.line = line;
+            this.profilerId = profilerId;
         }
     }
 }
