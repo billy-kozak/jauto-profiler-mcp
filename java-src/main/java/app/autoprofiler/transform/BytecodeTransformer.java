@@ -120,7 +120,7 @@ class BytecodeTransformer {
             MethodVisitor mv = super.visitMethod(
                 access, name, descriptor, signature, exceptions
             );
-            String sig = name + ":" + signature;
+            String sig = name + ":" + descriptor;
             MethodInstrument instr = methodInstruments.get(sig);
 
             if(instr != null) {
