@@ -43,8 +43,6 @@ static void JNICALL class_file_load_hook(
     jint *new_class_data_len,
     unsigned char **new_class_data
 ) {
-	(void)jni_env;
-	(void)loader;
 	(void)protection_domain;
 
 	if (class_being_redefined != NULL) {
@@ -61,9 +59,11 @@ static void JNICALL class_file_load_hook(
 		if (server != NULL) {
 			ps_send_class_loaded(
 				server,
+				jni_env,
 				name,
 				class_data,
-				(size_t)class_data_len
+				(size_t)class_data_len,
+				loader
 			);
 		} else {
 			LOG_WARN("server was null at class load");

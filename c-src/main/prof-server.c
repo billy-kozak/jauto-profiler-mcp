@@ -30,6 +30,7 @@
 #include "bytecode.h"
 #include "jni/jni-system.h"
 #include "jni/jni-profiler.h"
+#include "jni/jni-util.h"
 #include "jni/bc-instrument.h"
 #include "ps-thread-state.h"
 #include "instrument-handler.h"
@@ -101,28 +102,46 @@ static void handle_class_loaded(
 	char *name = msg->body.class_loaded.name;
 	unsigned char *bytecode = msg->body.class_loaded.bytecode;
 	size_t bytecode_len = msg->body.class_loaded.bytecode_len;
+	jobject loader = msg->body.class_loaded.loader;
+	struct class_info_list *loaded_classes = &ps->instr_ctx.loaded_classes;
 	struct method_list methods;
 	struct class_info *ci;
 
+
 	if (method_list_init(&methods, 0) != 0) {
-		ps_send_class_ev_dealloc(msg);
+		ps_send_class_ev_dealloc(jni_env, msg);
 		return;
 	}
 
+	/* transfer loader ownership from msg to ci */
+	msg->body.class_loaded.loader = NULL;
+
 	bc_extract_methods(bytecode, bytecode_len, &methods);
 
-	ci = ci_alloc(name, bytecode, bytecode_len, &methods);
+	ci = ci_alloc(name, bytecode, bytecode_len, &methods, loader);
 	if (ci == NULL) {
+		jni_safe_free_global_obj(jni_env, loader);
 		method_list_deep_destroy(&methods);
-	} else if (ci_list_add(&ps->instr_ctx.loaded_classes, ci) != 0) {
-		ci_free(ci);
-	} else {
-		ih_apply_deferred_instrumentations(
-			&ps->instr_ctx, jni_env, ps->jvmti, &ps->err_log, ci
+		goto exit;
+	}
+
+	int add_result = ci_list_add(loaded_classes, jni_env, ci);
+	if (add_result == CI_LIST_ADD_ERR) {
+		ci_free(ci, jni_env);
+		goto exit;
+	} else if (add_result == CI_LIST_ADD_DUPLICATE) {
+		ih_reapply_instruments(
+			&ps->instr_ctx, jni_env, ps->jvmti,
+			&ps->err_log, ci
 		);
 	}
 
-	ps_send_class_ev_dealloc(msg);
+	ih_apply_deferred_instrumentations(
+		&ps->instr_ctx, jni_env, ps->jvmti, &ps->err_log, ci
+	);
+
+exit:
+	ps_send_class_ev_dealloc(jni_env, msg);
 }
 
 static void handle_usr_rq_instrument_method(
@@ -492,6 +511,8 @@ static void JNICALL event_loop(jvmtiEnv *jvmti_env, JNIEnv *jni_env, void *arg)
 			break;
 		}
 	}
+
+	ih_ctx_release_jvm_resources(&ps->instr_ctx, jni_env);
 
 	if (ps->agent_thread != NULL) {
 		(*jni_env)->DeleteGlobalRef(jni_env, ps->agent_thread);

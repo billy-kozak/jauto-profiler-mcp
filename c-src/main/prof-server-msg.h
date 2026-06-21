@@ -20,6 +20,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <jni.h>
 
 struct user_if_client;
 struct pstring;
@@ -52,6 +53,7 @@ struct psm_class_loaded {
 	char *name;
 	unsigned char *bytecode;
 	size_t bytecode_len;
+	jobject loader;
 };
 
 struct psm_usr_rq_loaded_classes {

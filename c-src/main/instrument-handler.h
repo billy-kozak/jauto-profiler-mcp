@@ -48,6 +48,7 @@ struct instr_ctx {
 
 int  ih_ctx_init(struct instr_ctx *ctx);
 void ih_ctx_destroy(struct instr_ctx *ctx);
+void ih_ctx_release_jvm_resources(struct instr_ctx *ctx, JNIEnv* jni_env);
 
 enum instrument_resp_status ih_instrument_method(
 	struct instr_ctx *ctx,
@@ -85,6 +86,14 @@ enum deinstrument_resp_status ih_deinstrument_by_id(
 );
 
 void ih_apply_deferred_instrumentations(
+	struct instr_ctx *ctx,
+	JNIEnv *jni_env,
+	jvmtiEnv *jvmti,
+	struct prof_err_log *err_log,
+	struct class_info *ci
+);
+
+void ih_reapply_instruments(
 	struct instr_ctx *ctx,
 	JNIEnv *jni_env,
 	jvmtiEnv *jvmti,

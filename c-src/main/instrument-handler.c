@@ -61,6 +61,18 @@ int ih_ctx_init(struct instr_ctx *ctx)
 	return 0;
 }
 
+void ih_ctx_release_jvm_resources(struct instr_ctx *ctx, JNIEnv *jni_env)
+{
+	struct hash_tab_itr itr;
+	struct class_info *ci;
+
+	ci_list_itr_init(&ctx->loaded_classes, &itr);
+
+	while((ci = ci_list_iterate(&ctx->loaded_classes, &itr)) != NULL) {
+		ci_release_jvm_resources(ci, jni_env);
+	}
+}
+
 void ih_ctx_destroy(struct instr_ctx *ctx)
 {
 	ci_list_deep_destroy(&ctx->loaded_classes);
@@ -106,6 +118,7 @@ static int retransform_pending(
 	JNIEnv *jni_env,
 	jvmtiEnv *jvmti,
 	const char *class_name,
+	jobject loader,
 	const char *method_sig,
 	const unsigned char *new_bc,
 	size_t new_bc_len,
@@ -119,7 +132,7 @@ static int retransform_pending(
 	ctx->pending.bytecode_len = new_bc_len;
 	ctx->pending.profiler_id  = profiler_id;
 
-	ret = jni_retransform_class(jni_env, jvmti, class_name);
+	ret = jni_retransform_class(jni_env, jvmti, class_name, loader);
 	if (ret != 0) {
 		LOG_ERROR("RetransformClasses failed");
 	}
@@ -203,12 +216,14 @@ static int populate_class_info_line(
 	struct class_info *ci_entry,
 	struct class_info *ci_exit,
 	const struct mi_entry *entry,
-	int profiler_id
+	int profiler_id,
+	uint64_t instrument_id
 ) {
 	struct instrumented_line *r = ci_add_instrumented_line(
 		ci_entry,
 		entry->line.entry_line_number,
 		profiler_id,
+		instrument_id,
 		INSTRUMENT_ENTER
 	);
 	if (r == NULL) {
@@ -218,6 +233,7 @@ static int populate_class_info_line(
 		ci_exit,
 		entry->line.exit_line_number,
 		profiler_id,
+		instrument_id,
 		INSTRUMENT_EXIT
 	);
 
@@ -253,7 +269,7 @@ static int perform_instrumentation(
 
 	ret = retransform_pending(
 		ctx, jni_env, jvmti,
-		(char *)ci->name->str, method_sig,
+		(char *)ci->name->str, ci->loader, method_sig,
 		new_bc, new_bc_len, profiler_id
 	);
 	free(new_bc);
@@ -435,7 +451,7 @@ static void do_deferred_line_instrumentation(
 	}
 
 	int pop_ret = populate_class_info_line(
-		ci_entry, ci_exit, entry, profiler_id
+		ci_entry, ci_exit, entry, profiler_id, instrument_id
 	);
 	if (pop_ret != 0) {
 		LOG_WARN(
@@ -590,7 +606,7 @@ static enum deinstrument_resp_status deinstrument_line_by_id(
 		goto cleanup;
 	}
 	retransform_pending(
-		ctx, jni_env, jvmti, (char *)ci_entry->name->str,
+		ctx, jni_env, jvmti, (char *)ci_entry->name->str, ci_entry->loader,
 		NULL, new_bc, new_bc_len, -1
 	);
 	free(new_bc);
@@ -603,7 +619,7 @@ static enum deinstrument_resp_status deinstrument_line_by_id(
 			goto cleanup;
 		}
 		retransform_pending(
-			ctx, jni_env, jvmti, (char *)ci_exit->name->str,
+			ctx, jni_env, jvmti, (char *)ci_exit->name->str, ci_exit->loader,
 			NULL, new_bc, new_bc_len, -1
 		);
 		free(new_bc);
@@ -687,7 +703,7 @@ static enum deinstrument_resp_status deinstrument_method_by_id(
 	}
 	if (retransform_pending(
 		ctx, jni_env, jvmti,
-		(char *)entry->entry_class_name->str,
+		(char *)entry->entry_class_name->str, ci->loader,
 		NULL, new_bc, new_bc_len, -1
 	) != 0) {
 		LOG_ERROR("deinstrument-by-id retransform failed");
@@ -858,7 +874,7 @@ enum instrument_line_resp_status ih_instrument_line(
 	}
 
 	int pop_ret = populate_class_info_line(
-		ci_entry, ci_exit, entry, profiler_id
+		ci_entry, ci_exit, entry, profiler_id, instrument_id
 	);
 	if (pop_ret != 0) {
 		jni_remove_profiler(jni_env, profiler_id);
@@ -927,4 +943,69 @@ void ih_apply_deferred_instrumentations(
 	struct class_info *ci
 ) {
 	do_deferred_instrumentations(ctx, jni_env, jvmti, err_log, ci);
+}
+
+void ih_reapply_instruments(
+	struct instr_ctx *ctx,
+	JNIEnv *jni_env,
+	jvmtiEnv *jvmti,
+	struct prof_err_log *err_log,
+	struct class_info *ci
+) {
+	unsigned char *new_bc;
+	size_t new_bc_len;
+	size_t i;
+
+	if (ci->instrumented.len == 0 && ci->lines.len == 0) {
+		return;
+	}
+
+	new_bc = do_instrumentation(jni_env, ci, &new_bc_len);
+	if (new_bc == NULL) {
+		goto fail;
+	}
+
+	int ret = retransform_pending(
+		ctx, jni_env, jvmti,
+		(char *)ci->name->str, ci->loader,
+		NULL, new_bc, new_bc_len, -1
+	);
+	free(new_bc);
+
+	if (ret == 0) {
+		return;
+	}
+
+fail:
+	LOG_ERROR(
+		"reapply instruments failed for '%s', removing all instruments",
+		(char *)ci->name->str
+	);
+	prof_err_log_printf(
+		err_log,
+		"reapply instruments failed for '%s': all instruments removed",
+		(char *)ci->name->str
+	);
+
+	for (i = 0; i < ci->instrumented.len; i++) {
+		mi_remove(
+			ctx->master_instruments,
+			ci->instrumented.arr[i].instrument_id
+		);
+		jni_remove_profiler(jni_env, ci->instrumented.arr[i].profiler_id);
+	}
+
+	for (i = 0; i < ci->lines.len; i++) {
+		if (ci->lines.arr[i].type == INSTRUMENT_ENTER) {
+			mi_remove(
+				ctx->master_instruments,
+				ci->lines.arr[i].instrument_id
+			);
+			jni_remove_profiler(
+				jni_env, ci->lines.arr[i].profiler_id
+			);
+		}
+	}
+
+	ci_clear_instruments(ci);
 }

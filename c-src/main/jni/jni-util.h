@@ -15,33 +15,25 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef _JNI_PROFILER_H
-#define _JNI_PROFILER_H
+#ifndef _JNI_UTIL_H
+#define _JNI_UTIL_H
 
 #include <jni.h>
-#include <jvmti.h>
-#include <stdint.h>
-#include <stddef.h>
 
-int jni_profiler_init_refs(JNIEnv *env);
-int jni_create_profiler(
-	JNIEnv *env,
-	uint64_t instrument_id,
-	const char *class_name,
-	const char *method_sig
-);
-int jni_create_line_profiler(
-	JNIEnv *env,
-	uint64_t instrument_id,
-	const char *entry_class,
-	const char *exit_class,
-	int entry_line,
-	int exit_line
-);
-int jni_remove_profiler(JNIEnv *env, int profiler_id);
-int jni_get_profiler_stats(JNIEnv *env, uint8_t **buf_out, size_t *len_out);
-int jni_retransform_class(
-	JNIEnv *env, jvmtiEnv *jvmti, const char *class_name, jobject loader
-);
+static inline void jni_safe_free_global_obj(
+	JNIEnv * jni_env, jobject obj
+) {
+	if(obj != NULL) {
+		(*jni_env)->DeleteGlobalRef(jni_env, obj);
+	}
+}
 
-#endif /* _JNI_PROFILER_H */
+static inline void jni_safe_free_global_class(
+	JNIEnv * jni_env, jclass obj
+) {
+	if(obj != NULL) {
+		(*jni_env)->DeleteGlobalRef(jni_env, obj);
+	}
+}
+
+#endif /* _JNI_UTIL_H */

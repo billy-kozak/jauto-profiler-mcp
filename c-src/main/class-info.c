@@ -18,8 +18,8 @@
 
 #include "class-info.h"
 
+#include "jni/jni-util.h"
 #include "util/dyn-arr.h"
-#include "util/log.h"
 #include "util/pstring.h"
 
 #define LOG_TAG "class-info"
@@ -27,6 +27,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <jni.h>
+#include <assert.h>
 
 DYNARR_FUNCS(method_list, method_list, struct pstring *)
 
@@ -96,7 +98,8 @@ struct class_info *ci_alloc(
 	char *name,
 	const unsigned char *bytecode,
 	size_t bytecode_len,
-	struct method_list *methods
+	struct method_list *methods,
+	jobject loader
 ) {
 	struct class_info *ci = malloc(sizeof(*ci));
 
@@ -113,6 +116,7 @@ struct class_info *ci_alloc(
 	}
 	memcpy(ci->bytecode, bytecode, bytecode_len);
 	ci->bytecode_len = bytecode_len;
+	ci->loader = loader;
 	ci->methods = *methods;
 	if (instrumented_method_list_init(&ci->instrumented, 1) != 0) {
 		goto fail_bytecode;
@@ -153,8 +157,20 @@ int ci_remove_instrumented_by_sig(
 	return -1;
 }
 
-void ci_free(struct class_info *ci)
+void ci_release_jvm_resources(struct class_info *ci, JNIEnv *jni_env)
 {
+	jni_safe_free_global_obj(jni_env, ci->loader);
+	ci->loader = NULL;
+}
+
+void ci_free(struct class_info *ci, JNIEnv *jni_env)
+{
+	if(jni_env != NULL) {
+		jni_safe_free_global_obj(jni_env, ci->loader);
+	} else {
+		assert(ci->loader == NULL);
+	}
+
 	free(ci->name);
 	free(ci->bytecode);
 	method_list_deep_destroy(&ci->methods);
@@ -167,15 +183,35 @@ struct instrumented_line *ci_add_instrumented_line(
 	struct class_info *ci,
 	int line_number,
 	int profiler_id,
+	uint64_t instrument_id,
 	enum instrument_type type
 ) {
 	struct instrumented_line *line = instrumented_lines_add(&ci->lines);
 	if (line != NULL) {
 		line->line_number = line_number;
 		line->profiler_id = profiler_id;
+		line->instrument_id = instrument_id;
 		line->type = type;
 	}
 	return line;
+}
+
+void ci_steal_instruments(struct class_info *dst, struct class_info *src)
+{
+	instrumented_method_list_deep_destroy(&dst->instrumented);
+	instrumented_lines_destroy(&dst->lines);
+	dst->instrumented = src->instrumented;
+	dst->lines = src->lines;
+	memset(&src->instrumented, 0, sizeof(src->instrumented));
+	memset(&src->lines, 0, sizeof(src->lines));
+}
+
+void ci_clear_instruments(struct class_info *ci)
+{
+	instrumented_method_list_deep_destroy(&ci->instrumented);
+	instrumented_method_list_init(&ci->instrumented, 1);
+	instrumented_lines_destroy(&ci->lines);
+	instrumented_lines_init(&ci->lines, 1);
 }
 
 int ci_remove_instrumented_line(struct class_info *ci, int line_number)

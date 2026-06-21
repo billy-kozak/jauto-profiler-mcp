@@ -20,14 +20,18 @@
 #include "prof-server.h"
 #include "prof-server-msg.h"
 #include "user-if.h"
+#include "jni/jni-util.h"
 
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 struct ps_msg *ps_send_class_ev_alloc(
+	JNIEnv *env,
 	const char *name,
 	const unsigned char *bytecode,
-	size_t bytecode_len
+	size_t bytecode_len,
+	jobject loader
 ) {
 	struct ps_msg *msg;
 	char *name_copy;
@@ -56,12 +60,22 @@ struct ps_msg *ps_send_class_ev_alloc(
 	msg->body.class_loaded.name = name_copy;
 	msg->body.class_loaded.bytecode = bytecode_copy;
 	msg->body.class_loaded.bytecode_len = bytecode_len;
+	msg->body.class_loaded.loader = (loader != NULL) ?
+		(*env)->NewGlobalRef(env, loader) : NULL;
 
 	return msg;
 }
 
-void ps_send_class_ev_dealloc(struct ps_msg *msg)
+void ps_send_class_ev_dealloc(JNIEnv *env, struct ps_msg *msg)
 {
+	if (env != NULL) {
+		jni_safe_free_global_obj(
+			env, msg->body.class_loaded.loader
+		);
+	} else {
+		assert(msg->body.class_loaded.loader == NULL);
+	}
+
 	free(msg->body.class_loaded.name);
 	free(msg->body.class_loaded.bytecode);
 	free(msg);
@@ -69,12 +83,14 @@ void ps_send_class_ev_dealloc(struct ps_msg *msg)
 
 int ps_send_class_loaded(
 	struct prof_server *ps,
+	JNIEnv *env,
 	const char *name,
 	const unsigned char *bytecode,
-	size_t bytecode_len
+	size_t bytecode_len,
+	jobject loader
 ) {
 	struct ps_msg *msg = ps_send_class_ev_alloc(
-		name, bytecode, bytecode_len
+		env, name, bytecode, bytecode_len, loader
 	);
 
 	if (msg == NULL) {
@@ -82,7 +98,7 @@ int ps_send_class_loaded(
 	}
 
 	if (ps_send_ev(ps, msg, sizeof(*msg)) != 0) {
-		ps_send_class_ev_dealloc(msg);
+		ps_send_class_ev_dealloc(env, msg);
 		return -1;
 	}
 

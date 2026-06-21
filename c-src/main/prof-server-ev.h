@@ -21,6 +21,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <jni.h>
 #include "util/pstring.h"
 
 struct prof_server;
@@ -28,17 +29,21 @@ struct ps_msg;
 struct user_if_client;
 
 struct ps_msg *ps_send_class_ev_alloc(
+	JNIEnv *env,
 	const char *name,
 	const unsigned char *bytecode,
-	size_t bytecode_len
+	size_t bytecode_len,
+	jobject loader
 );
-void ps_send_class_ev_dealloc(struct ps_msg *msg);
+void ps_send_class_ev_dealloc(JNIEnv *env, struct ps_msg *msg);
 
 int ps_send_class_loaded(
 	struct prof_server *ps,
+	JNIEnv *env,
 	const char *name,
 	const unsigned char *bytecode,
-	size_t bytecode_len
+	size_t bytecode_len,
+	jobject loader
 );
 int ps_send_usr_rq_loaded_classes(
 	struct prof_server *ps, struct user_if_client *client

@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "jni/jni-util.h"
 #include "util/log.h"
 
 #define LOG_TAG "jni-profiler"
@@ -236,13 +237,38 @@ int jni_get_profiler_stats(JNIEnv *env, uint8_t **buf_out, size_t *len_out)
 	return 0;
 }
 
+static int check_loader_match(
+	JNIEnv *env, jvmtiEnv *jvmti, jclass cls, jobject loader
+) {
+	jobject class_loader = NULL;
+	int match = 0;
+	jvmtiError err;
+
+	err = (*jvmti)->GetClassLoader(jvmti, cls, &class_loader);
+	if (err != JVMTI_ERROR_NONE) {
+		return 0;
+	}
+
+	if (loader == NULL && class_loader == NULL) {
+		match = 1;
+	} else if (loader != NULL && class_loader != NULL) {
+		match = (*env)->IsSameObject(env, loader, class_loader);
+	}
+
+	if (class_loader != NULL) {
+		(*env)->DeleteLocalRef(env, class_loader);
+	}
+	return match;
+}
+
 int jni_retransform_class(
-	JNIEnv *env, jvmtiEnv *jvmti, const char *class_name
+	JNIEnv *env, jvmtiEnv *jvmti, const char *class_name, jobject loader
 ) {
 	jvmtiError err;
 	jint class_count;
 	jclass *classes;
-	jclass target = NULL;
+	jclass best = NULL;
+	int found_loader_match = 0;
 	size_t name_len;
 	jint i;
 
@@ -255,11 +281,13 @@ int jni_retransform_class(
 
 	for (i = 0; i < class_count; i++) {
 		char *sig = NULL;
-		int match = 0;
+		int name_match = 0;
 
-		err = (*jvmti)->GetClassSignature(jvmti, classes[i], &sig, NULL);
+		err = (*jvmti)->GetClassSignature(
+			jvmti, classes[i], &sig, NULL
+		);
 		if (err == JVMTI_ERROR_NONE && sig != NULL) {
-			match = (
+			name_match = (
 				sig[0] == 'L' &&
 				strncmp(sig + 1, class_name, name_len) == 0 &&
 				sig[name_len + 1] == ';'
@@ -267,27 +295,41 @@ int jni_retransform_class(
 			(*jvmti)->Deallocate(jvmti, (unsigned char *)sig);
 		}
 
-		if (match) {
-			target = (*env)->NewGlobalRef(env, classes[i]);
-			(*env)->DeleteLocalRef(env, classes[i]);
-			i++;
+		if (name_match) {
+			int is_loader_match = check_loader_match(
+				env, jvmti, classes[i], loader
+			);
+			if (is_loader_match || best == NULL) {
+				jni_safe_free_global_class(env, best);
+				best = (*env)->NewGlobalRef(env, classes[i]);
+			}
+			if (is_loader_match) {
+				found_loader_match = 1;
+			}
+		}
+
+		(*env)->DeleteLocalRef(env, classes[i]);
+
+		if(found_loader_match) {
 			break;
 		}
-		(*env)->DeleteLocalRef(env, classes[i]);
-	}
-
-	for (; i < class_count; i++) {
-		(*env)->DeleteLocalRef(env, classes[i]);
 	}
 
 	(*jvmti)->Deallocate(jvmti, (unsigned char *)classes);
 
-	if (target == NULL) {
+	if (best == NULL) {
 		return -1;
 	}
 
-	err = (*jvmti)->RetransformClasses(jvmti, 1, &target);
-	(*env)->DeleteGlobalRef(env, target);
+	if (!found_loader_match) {
+		LOG_WARN(
+			"retransform %s: no loader match, using first name match",
+			class_name
+		);
+	}
+
+	err = (*jvmti)->RetransformClasses(jvmti, 1, &best);
+	(*env)->DeleteGlobalRef(env, best);
 
 	if (err != JVMTI_ERROR_NONE) {
 		LOG_ERROR("RetransformClasses error code: %d", (int)err);

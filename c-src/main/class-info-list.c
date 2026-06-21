@@ -29,7 +29,7 @@
 static void ci_destructor(void *ci_ptr)
 {
 	struct class_info *ci = ci_ptr;
-	ci_free(ci);
+	ci_free(ci, NULL);
 }
 
 size_t ci_list_size(const struct class_info_list *list)
@@ -61,19 +61,25 @@ int ci_list_init(struct class_info_list *list)
 	return list->tab != NULL ? 0 : 1;
 }
 
-int ci_list_add(struct class_info_list *list, struct class_info *ci)
-{
+int ci_list_add(
+	struct class_info_list *list,
+	JNIEnv *env,
+	struct class_info *ci
+) {
 	uint8_t *name = (unsigned char*)ci->name->str;
 	struct hash_add_result r = hash_tab_add(
 		list->tab, name, ci->name->size, ci
 	);
 
-	if(r.prev != NULL) {
-		LOG_ERROR("Duplicate class add '%s'", ci->name->str);
-		ci_destructor(r.prev);
+	if (r.prev != NULL) {
+		struct class_info *old = r.prev;
+		LOG_WARN("Duplicate class add '%s'", ci->name->str);
+		ci_steal_instruments(ci, old);
+		ci_free(old, env);
+		return CI_LIST_ADD_DUPLICATE;
 	}
 
-	return r.err;
+	return r.err != 0 ? CI_LIST_ADD_ERR : CI_LIST_ADD_OK;
 }
 
 void ci_list_deep_destroy(struct class_info_list *list)

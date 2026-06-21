@@ -21,6 +21,7 @@
 #include "class-info.h"
 #include "util/hash-tab.h"
 
+#include <jni.h>
 #include <stddef.h>
 
 struct class_info_list {
@@ -35,7 +36,11 @@ void ci_list_itr_init(
 );
 size_t ci_list_size(const struct class_info_list *list);
 int ci_list_init(struct class_info_list *list);
-int ci_list_add(struct class_info_list *list, struct class_info *ci);
+#define CI_LIST_ADD_OK        0
+#define CI_LIST_ADD_DUPLICATE 1
+#define CI_LIST_ADD_ERR      -1
+
+int ci_list_add(struct class_info_list *list, JNIEnv *env, struct class_info *ci);
 void ci_list_deep_destroy(struct class_info_list *list);
 struct class_info *ci_list_find_by_name(
 	const struct class_info_list *list, const char *name

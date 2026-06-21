@@ -21,6 +21,7 @@
 #include "util/dyn-arr.h"
 #include "util/pstring.h"
 
+#include <jni.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -61,6 +62,7 @@ enum instrument_type {
 struct instrumented_line {
 	int line_number;
 	int profiler_id;
+	uint64_t instrument_id;
 	enum instrument_type type;
 };
 
@@ -70,6 +72,7 @@ struct class_info {
 	struct pstring *name;
 	unsigned char *bytecode;
 	size_t bytecode_len;
+	jobject loader;
 	struct method_list methods;
 	struct instrumented_method_list instrumented;
 	struct instrumented_lines lines;
@@ -79,9 +82,11 @@ struct class_info *ci_alloc(
 	char *name,
 	const unsigned char *bytecode,
 	size_t bytecode_len,
-	struct method_list *methods
+	struct method_list *methods,
+	jobject loader
 );
-void ci_free(struct class_info *ci);
+void ci_release_jvm_resources(struct class_info *ci, JNIEnv *jni_env);
+void ci_free(struct class_info *ci, JNIEnv *jni_env);
 int ci_remove_instrumented_by_sig(
 	struct class_info *ci,
 	const char *method_sig,
@@ -91,8 +96,11 @@ struct instrumented_line *ci_add_instrumented_line(
 	struct class_info *ci,
 	int line_number,
 	int profiler_id,
+	uint64_t instrument_id,
 	enum instrument_type type
 );
+void ci_steal_instruments(struct class_info *dst, struct class_info *src);
+void ci_clear_instruments(struct class_info *ci);
 /* Returns profiler_id on success, -1 if not found. */
 int ci_remove_instrumented_line(struct class_info *ci, int line_number);
 
