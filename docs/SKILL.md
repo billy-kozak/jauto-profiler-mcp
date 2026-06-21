@@ -70,6 +70,27 @@ The target JVM must have been launched with two extra flags:
 - `JAUTO_PROF_LOG_LEVEL`: sets the log level to one of OFF, WARN, INFO, DEBUG.
 - `JAUTO_PROF_PAUSE_ON_START`: set to zero to disable the automatic pause on start behaviour.
 
+---
+
+## Line-range probes — `instrument_line`
+
+Use `instrument_line` when you want to measure a *region* of code rather than an entire method. You supply an
+entry line number and an exit line number; the profiler injects probes at those two source lines and records the
+elapsed time and call count between them.
+
+```
+instrument_line(entry_class, entry_line, exit_line, exit_class=None)
+→ { status, instrument_id }
+```
+
+- If `exit_class` is omitted the exit probe is placed in the same class as the entry probe.
+- `instrument_id` is returned so you can later remove the probe with `deinstrument_by_id`.
+- The same performance warnings apply as for `instrument_method`: avoid probing very tight inner loops.
+- Line probes are useful when a method is long and you want to isolate one logical block, or when you want to
+  measure the time between a call site in one class and a return point in a callee.
+
+---
+
 ## Choosing what to instrument — a top-down strategy
 
 You should think of profiling as a search of a problem space. Your goal is to identify an area, or areas in the target

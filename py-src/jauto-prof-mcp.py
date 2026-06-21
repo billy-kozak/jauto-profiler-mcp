@@ -311,7 +311,7 @@ def resume_application() -> str:
       4. Call resume_application to let main() proceed
       5. After the application exits, call get_profiler_stats
 
-    To disable the automatic startup pause, set JAUTO_PROF_PAUSE=0 in
+    To disable the automatic startup pause, set JAUTO_PROF_PAUSE_ON_START=0 in
     the environment before launching the JVM.
     """
     return ProfClient().resume()
