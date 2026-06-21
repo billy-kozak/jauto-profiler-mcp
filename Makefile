@@ -23,7 +23,7 @@
 CC := gcc
 LD := gcc
 
-NO_DEPS_TARGETS += clean directories dir_clean
+NO_DEPS_TARGETS += clean
 
 JAVA_HOME = $(shell build-src/find-java-home)
 JAVA_INC = -I$(JAVA_HOME)/include -I$(JAVA_HOME)/include/linux
@@ -81,8 +81,6 @@ JSRC_DIR = $(shell find $(JSRC_ROOT) -type d)
 
 BUILDSRC_ROOT = build-src
 PYSRC_ROOT = py-src
-
-NO_DEPS_TARGETS += clean directories
 ###############################################################################
 #                                 BUILD FILES                                 #
 ###############################################################################
@@ -135,6 +133,11 @@ all: optimized
 
 .PHONY: dist
 dist: $(OUT_DIST)
+
+.PHONY: clean-musl-dist
+clean-musl-dist:
+	$(MAKE) clean
+	$(MAKE) musl-linked java dist
 
 optimized: CFLAGS +=-Os -flto=auto -DNDEBUG
 optimized: LDFLAGS += -Os -flto=auto
@@ -207,6 +210,14 @@ $(OUT_DIST): $(SKILL_DOC) $(DIST_README)
 .PHONY: clean
 clean:
 	rm -rf $(CLEAN_FILES)
+
+ifneq ($(filter clean,$(MAKECMDGOALS)),)
+ifneq ($(filter-out clean,$(MAKECMDGOALS)),)
+$(error Cannot combine 'clean' with other targets. \
+Run 'make clean' and 'make $(filter-out clean,$(MAKECMDGOALS))' separately, \
+or use 'make clean-musl-dist' for a clean release build.)
+endif
+endif
 
 include build-src/tests.mk
 
