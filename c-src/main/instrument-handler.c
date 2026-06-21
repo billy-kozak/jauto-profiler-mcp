@@ -945,6 +945,76 @@ void ih_apply_deferred_instrumentations(
 	do_deferred_instrumentations(ctx, jni_env, jvmti, err_log, ci);
 }
 
+static void cleanup_dangling(
+	struct instr_ctx *ctx,
+	JNIEnv *jni_env,
+	jvmtiEnv *jvmti,
+	const struct mi_entry *entry,
+	enum instrument_type other_type
+) {
+	const char *other_class;
+	int other_line;
+	struct class_info *ci_other;
+	unsigned char *new_bc;
+	size_t new_bc_len;
+
+	if (other_type == INSTRUMENT_EXIT) {
+		other_class = (char *)entry->line.exit_class_name->str;
+		other_line = entry->line.exit_line_number;
+	} else {
+		other_class = (char *)entry->entry_class_name->str;
+		other_line = entry->line.entry_line_number;
+	}
+
+	ci_other = ci_list_find_by_name(&ctx->loaded_classes, other_class);
+	if (ci_other == NULL) {
+		return;
+	}
+
+	ci_remove_instrumented_line(ci_other, other_line);
+
+	new_bc = do_instrumentation(jni_env, ci_other, &new_bc_len);
+	if (new_bc != NULL) {
+		retransform_pending(
+			ctx, jni_env, jvmti,
+			other_class, ci_other->loader,
+			NULL, new_bc, new_bc_len, -1
+		);
+		free(new_bc);
+	}
+}
+
+static void cleanup_failed_line(
+	struct instr_ctx *ctx,
+	JNIEnv *jni_env,
+	jvmtiEnv *jvmti,
+	const struct instrumented_line *line
+) {
+	uint64_t instrument_id = line->instrument_id;
+	int profiler_id = line->profiler_id;
+	enum instrument_type type = line->type;
+	const struct mi_entry *entry;
+	enum instrument_type other_type;
+	bool cross_class;
+
+	entry = mi_find(ctx->master_instruments, instrument_id);
+	cross_class = (entry != NULL) && (strcmp(
+		(char *)entry->entry_class_name->str,
+		(char *)entry->line.exit_class_name->str
+	) != 0);
+
+	if (cross_class) {
+		other_type = (type == INSTRUMENT_ENTER)
+			? INSTRUMENT_EXIT : INSTRUMENT_ENTER;
+		cleanup_dangling(ctx, jni_env, jvmti, entry, other_type);
+	}
+
+	if (type == INSTRUMENT_ENTER || cross_class) {
+		mi_remove(ctx->master_instruments, instrument_id);
+		jni_remove_profiler(jni_env, profiler_id);
+	}
+}
+
 void ih_reapply_instruments(
 	struct instr_ctx *ctx,
 	JNIEnv *jni_env,
@@ -996,15 +1066,7 @@ fail:
 	}
 
 	for (i = 0; i < ci->lines.len; i++) {
-		if (ci->lines.arr[i].type == INSTRUMENT_ENTER) {
-			mi_remove(
-				ctx->master_instruments,
-				ci->lines.arr[i].instrument_id
-			);
-			jni_remove_profiler(
-				jni_env, ci->lines.arr[i].profiler_id
-			);
-		}
+		cleanup_failed_line(ctx, jni_env, jvmti, &ci->lines.arr[i]);
 	}
 
 	ci_clear_instruments(ci);
