@@ -558,7 +558,13 @@ struct prof_server *ps_init(void)
 		goto fail_cond;
 	}
 
-	ps->uif = uif_init(prof_socket_path());
+	struct prof_socket_spec socket_spec;
+	if (prof_socket(&socket_spec) != 0) {
+		LOG_ERROR("invalid socket specification");
+		goto fail_queue;
+	}
+
+	ps->uif = uif_init(&socket_spec);
 	if (ps->uif == NULL) {
 		LOG_ERROR("user socket creation failed");
 		goto fail_queue;

@@ -18,10 +18,30 @@
 #ifndef _PROF_ENV_H
 #define _PROF_ENV_H
 
-#define SOCKET_ENV_VAR "JAUTO_PROF_SOCKET"
-#define PAUSE_ENV_VAR "JAUTO_PROF_PAUSE_ON_START"
+#include <stdint.h>
 
-const char *prof_socket_path(void);
+#define SOCKET_ENV_VAR "JAUTO_PROF_SOCKET"
+#define PAUSE_ENV_VAR  "JAUTO_PROF_PAUSE_ON_START"
+
+enum prof_socket_type {
+	PROF_SOCKET_UNIX,
+	PROF_SOCKET_TCP,
+};
+
+struct prof_socket_tcp {
+	uint8_t  addr[4]; /* IPv4 address, most-significant octet first */
+	uint16_t port;    /* port, host byte order */
+};
+
+struct prof_socket_spec {
+	enum prof_socket_type type;
+	union {
+		const char             *unix_path;
+		struct prof_socket_tcp  tcp;
+	};
+};
+
+int prof_socket(struct prof_socket_spec *out);
 int prof_pause_on_start(void);
 
-#endif /*_PROF_ENV_H */
+#endif /* _PROF_ENV_H */

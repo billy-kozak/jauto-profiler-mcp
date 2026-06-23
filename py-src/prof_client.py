@@ -132,13 +132,23 @@ class ProfClient:
                 pass
             self._sock = None
 
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        if self._path.startswith('tcp://'):
+            rest = self._path[len('tcp://'):]
+            host, port_str = rest.rsplit(':', 1)
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                sock.connect((host, int(port_str)))
+            except OSError:
+                sock.close()
+                raise
+        else:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                sock.connect(self._path)
+            except OSError:
+                sock.close()
+                raise
 
-        try:
-            sock.connect(self._path)
-        except OSError:
-            sock.close()
-            raise
         self._sock = sock
 
     def _recv_msg(self) -> RawMsg:

@@ -22,6 +22,7 @@
 #include <stdint.h>
 
 #include "meta/cc.h"
+#include "prof-env.h"
 #include "util/pstring.h"
 
 #if __STDC_VERSION__ >= 202300L
@@ -191,7 +192,7 @@ struct PACKED user_msg {
 	} body;
 };
 
-struct user_if *uif_init(const char *path);
+struct user_if *uif_init(const struct prof_socket_spec *spec);
 struct user_if *uif_destroy(struct user_if *uif);
 void uif_register_handler(
 	struct user_if *uif,

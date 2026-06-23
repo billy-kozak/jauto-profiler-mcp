@@ -18,11 +18,11 @@
 
 #include "user-if.h"
 
-#include "prof-env.h"
 #include "util/fs-util.h"
 
 #include <errno.h>
 #include <fcntl.h>
+#include <netinet/in.h>
 #include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -67,7 +67,8 @@ struct user_if {
 	int shutdown_fd;
 	int listener_running;
 	pthread_t listener;
-	char *socket_path;
+	char *socket_path;            /* Unix path to unlink; NULL for TCP */
+	enum prof_socket_type socket_type;
 	int (*handler)(void*, struct user_msg *, struct user_if_client *);
 	void *handler_data;
 	struct client_list clients;
@@ -109,6 +110,9 @@ static void close_client(struct user_if *uif, struct uif_client_ctx *ctx)
 
 	uif_client_set_closed(client);
 	epoll_ctl(uif->epoll_fd, EPOLL_CTL_DEL, client->fd, NULL);
+	if (uif->socket_type == PROF_SOCKET_TCP) {
+		shutdown(client->fd, SHUT_RDWR);
+	}
 	close(client->fd);
 
 	for (i = 0; i < (int)uif->clients.len; i++) {
@@ -128,6 +132,9 @@ static void close_all_clients(struct user_if *uif)
 	for (i = 0; i < (int)uif->clients.len; i++) {
 		struct user_if_client *client = uif->clients.arr[i].client;
 		uif_client_set_closed(client);
+		if (uif->socket_type == PROF_SOCKET_TCP) {
+			shutdown(client->fd, SHUT_RDWR);
+		}
 		close(client->fd);
 		free(uif->clients.arr[i].buf);
 		uif_client_release(client);
@@ -340,16 +347,130 @@ static int check_socket_conflict(const char *path)
 	return 0;
 }
 
-struct user_if *uif_init(const char *path)
+static int uif_setup_unix(struct user_if *uif, const char *path)
 {
-	struct user_if *uif;
 	struct sockaddr_un addr;
 	struct epoll_event ev;
-	size_t path_len = strlen(path);
+	size_t path_len;
 
+	path_len = strlen(path);
 	if (path_len >= sizeof(addr.sun_path)) {
-		return NULL;
+		return -1;
 	}
+
+	if (check_socket_conflict(path) != 0) {
+		fprintf(
+			stderr,
+			"jauto-profiler: socket '%s' is already in use by a "
+			"live server. Set %s to use a different path.\n",
+			path, SOCKET_ENV_VAR
+		);
+		return -1;
+	}
+
+	uif->socket_path = strdup(path);
+	if (uif->socket_path == NULL) {
+		return -1;
+	}
+
+	uif->server_fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	if (uif->server_fd < 0) {
+		goto fail_path;
+	}
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_UNIX;
+	memcpy(addr.sun_path, path, path_len + 1);
+
+	if (bind(
+		uif->server_fd, (struct sockaddr *)&addr, sizeof(addr)
+	) != 0) {
+		goto fail_fd;
+	}
+
+	if (listen(uif->server_fd, UIF_LISTEN_BACKLOG) != 0) {
+		goto fail_fd;
+	}
+
+	ev.events = EPOLLIN;
+	ev.data.fd = uif->server_fd;
+	if (epoll_ctl(
+		uif->epoll_fd, EPOLL_CTL_ADD, uif->server_fd, &ev
+	) != 0) {
+		goto fail_fd;
+	}
+
+	return 0;
+
+fail_fd:
+	close(uif->server_fd);
+	unlink(path);
+	uif->server_fd = -1;
+fail_path:
+	free(uif->socket_path);
+	uif->socket_path = NULL;
+	return -1;
+}
+
+static int uif_setup_tcp(
+	struct user_if *uif,
+	const struct prof_socket_tcp *tcp
+) {
+	struct sockaddr_in addr;
+	struct epoll_event ev;
+	int opt = 1;
+
+	uif->server_fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	if (uif->server_fd < 0) {
+		return -1;
+	}
+
+	if (setsockopt(
+		uif->server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)
+	) != 0) {
+		goto fail;
+	}
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sin_family = AF_INET;
+	addr.sin_port   = htons(tcp->port);
+	addr.sin_addr.s_addr = htonl(
+		((uint32_t)tcp->addr[0] << 24) |
+		((uint32_t)tcp->addr[1] << 16) |
+		((uint32_t)tcp->addr[2] <<  8) |
+		 (uint32_t)tcp->addr[3]
+	);
+
+	if (bind(
+		uif->server_fd, (struct sockaddr *)&addr, sizeof(addr)
+	) != 0) {
+		goto fail;
+	}
+
+	if (listen(uif->server_fd, UIF_LISTEN_BACKLOG) != 0) {
+		goto fail;
+	}
+
+	ev.events = EPOLLIN;
+	ev.data.fd = uif->server_fd;
+	if (epoll_ctl(
+		uif->epoll_fd, EPOLL_CTL_ADD, uif->server_fd, &ev
+	) != 0) {
+		goto fail;
+	}
+
+	return 0;
+
+fail:
+	close(uif->server_fd);
+	uif->server_fd = -1;
+	return -1;
+}
+
+struct user_if *uif_init(const struct prof_socket_spec *spec)
+{
+	struct user_if *uif;
+	struct epoll_event ev;
 
 	uif = malloc(sizeof(*uif));
 	if (uif == NULL) {
@@ -360,19 +481,16 @@ struct user_if *uif_init(const char *path)
 		goto fail;
 	}
 
-	uif->handler = NULL;
-	uif->handler_data = NULL;
-	uif->server_fd = -1;
+	uif->handler        = NULL;
+	uif->handler_data   = NULL;
+	uif->server_fd      = -1;
+	uif->socket_path    = NULL;
+	uif->socket_type    = spec->type;
 	uif->listener_running = 0;
-
-	uif->socket_path = strdup(path);
-	if (uif->socket_path == NULL) {
-		goto fail_clients;
-	}
 
 	uif->epoll_fd = epoll_create1(EPOLL_CLOEXEC);
 	if (uif->epoll_fd < 0) {
-		goto fail_path;
+		goto fail_clients;
 	}
 
 	uif->shutdown_fd = eventfd(0, EFD_CLOEXEC);
@@ -380,41 +498,14 @@ struct user_if *uif_init(const char *path)
 		goto fail_epoll;
 	}
 
-	if (check_socket_conflict(path) != 0) {
-		fprintf(
-			stderr,
-			"jauto-profiler: socket '%s' is already in use by a "
-			"live server. Set %s to use a different path.\n",
-			path, SOCKET_ENV_VAR
-		);
-		goto fail_shutdown;
-	}
-
-	uif->server_fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-	if (uif->server_fd < 0) {
-		goto fail_shutdown;
-	}
-
-	memset(&addr, 0, sizeof(addr));
-	addr.sun_family = AF_UNIX;
-	memcpy(addr.sun_path, path, path_len + 1);
-
-	if (bind(
-		uif->server_fd, (struct sockaddr *)&addr, sizeof(addr)
-	) != 0) {
-		goto fail_server;
-	}
-
-	if (listen(uif->server_fd, UIF_LISTEN_BACKLOG) != 0) {
-		goto fail_server;
-	}
-
-	ev.events = EPOLLIN;
-	ev.data.fd = uif->server_fd;
-	if (epoll_ctl(
-		uif->epoll_fd, EPOLL_CTL_ADD, uif->server_fd, &ev
-	) != 0) {
-		goto fail_server;
+	if (spec->type == PROF_SOCKET_TCP) {
+		if (uif_setup_tcp(uif, &spec->tcp) != 0) {
+			goto fail_shutdown;
+		}
+	} else {
+		if (uif_setup_unix(uif, spec->unix_path) != 0) {
+			goto fail_shutdown;
+		}
 	}
 
 	ev.events = EPOLLIN;
@@ -436,14 +527,16 @@ struct user_if *uif_init(const char *path)
 
 fail_server:
 	close(uif->server_fd);
-	unlink(path);
-	uif->server_fd = -1;
+	if (uif->socket_type == PROF_SOCKET_UNIX) {
+		unlink(uif->socket_path);
+		free(uif->socket_path);
+	}
+	uif->server_fd   = -1;
+	uif->socket_path = NULL;
 fail_shutdown:
 	close(uif->shutdown_fd);
 fail_epoll:
 	close(uif->epoll_fd);
-fail_path:
-	free(uif->socket_path);
 fail_clients:
 	client_list_destroy(&uif->clients);
 fail:
@@ -464,7 +557,9 @@ struct user_if *uif_destroy(struct user_if *uif)
 
 	if (uif->server_fd >= 0) {
 		close(uif->server_fd);
-		unlink(uif->socket_path);
+		if (uif->socket_type == PROF_SOCKET_UNIX) {
+			unlink(uif->socket_path);
+		}
 	}
 
 	close(uif->shutdown_fd);
