@@ -127,14 +127,38 @@ def cmd_get_async_errors(client, args):
 ###############################################################################
 
 
+def _tcp_addr(value):
+    parts = value.rsplit(':', 1)
+    valid = (
+        len(parts) == 2
+        and len(parts[0]) > 0
+        and parts[1].isdigit()
+        and 1 <= int(parts[1]) <= 65535
+    )
+    if not valid:
+        raise argparse.ArgumentTypeError(
+            f"expected <host>:<port>, got '{value}'"
+        )
+    return value
+
 
 def main():
     parser = argparse.ArgumentParser(prog='jauto-prof')
-    parser.add_argument(
+
+    conn = parser.add_mutually_exclusive_group()
+    conn.add_argument(
         '--socket', metavar='PATH',
         help=(
-            'profiler socket path '
+            'profiler socket; a Unix domain socket path, or '
+            'tcp://<host>:<port> for TCP '
             '(default: $JAUTO_PROF_SOCKET or /tmp/jauto-profiler.sock)'
+        ),
+    )
+    conn.add_argument(
+        '--tcp', metavar='HOST:PORT', type=_tcp_addr,
+        help=(
+            'connect to a TCP/IP profiler; '
+            'equivalent to --socket tcp://HOST:PORT'
         ),
     )
 
@@ -212,7 +236,12 @@ def main():
 
     args = parser.parse_args()
 
-    client = ProfClient(args.socket)
+    if args.tcp is not None:
+        socket_path = f'tcp://{args.tcp}'
+    else:
+        socket_path = args.socket  # None falls through to env var / default
+
+    client = ProfClient(socket_path)
 
     commands = {
         'list-classes':       ClientCmd(client, cmd_list_classes),
