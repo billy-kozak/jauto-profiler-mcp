@@ -21,6 +21,9 @@ distribution release.
 The profiler communicates over a Unix domain socket. The default path is `/tmp/jauto-profiler.sock`, overridable
 via `$JAUTO_PROF_SOCKET`. Two simultaneously running instances must each be given a distinct socket path.
 
+The profiler can also run on tcp/ip by setting `$JAUTO_PROF_SOCKET` to `tcp://<bind-addr>:<port>`. The tcp/ip server
+has absolutley no security, use at your own risk.
+
 By default, the target will pause VM execution after the profiler initializes. Set `$JAUTO_PROF_PAUSE_ON_START=0` to
 disable this behaviour, otherwise, use the `resume` command to start execution of the target.
 

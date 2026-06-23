@@ -66,6 +66,7 @@ The target JVM must have been launched with two extra flags:
 ## Important Environment variables:
 
 - `JAUTO_PROF_SOCKET`: sets the path of the profiler's unix domain socket (both for tools and for the server itself).
+    Can also enable (insecure) tcp/ip mode using the form `tcp://<addr>:<port>`
 - `JAUTO_PROF_LOG`:  sets the path where the profiler writes its debug log.
 - `JAUTO_PROF_LOG_LEVEL`: sets the log level to one of OFF, WARN, INFO, DEBUG.
 - `JAUTO_PROF_PAUSE_ON_START`: set to zero to disable the automatic pause on start behaviour.
