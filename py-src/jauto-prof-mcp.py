@@ -336,5 +336,53 @@ def resume_application(ctx: Context) -> str:
     return _client(ctx).resume()
 
 
+@mcp.tool()
+def connect(
+    ctx: Context,
+    unix_path: str | None = None,
+    tcp_host: str | None = None,
+    tcp_port: int | None = None,
+) -> str:
+    """Switch the profiler client to a different JVM socket at runtime.
+
+    Closes the current connection and opens a new one. Specify exactly one
+    of the two addressing modes:
+
+      Unix domain socket:
+        unix_path — absolute path to the socket file
+                    (e.g. "/tmp/jauto-profiler.sock")
+
+      TCP socket:
+        tcp_host  — hostname or IP address (e.g. "localhost" or "192.168.1.5")
+        tcp_port  — port number (e.g. 7777)
+
+    Returns the address string of the new connection. Raises ValueError if the
+    arguments are invalid. Connection errors are deferred to the next tool call
+    (the client will attempt to reconnect automatically).
+    """
+    has_unix = unix_path is not None
+    has_tcp  = tcp_host is not None or tcp_port is not None
+
+    if has_unix and has_tcp:
+        raise ValueError(
+            "specify either unix_path or tcp_host/tcp_port, not both"
+        )
+    if not has_unix and not has_tcp:
+        raise ValueError(
+            "specify either unix_path or tcp_host and tcp_port"
+        )
+    if has_tcp and (tcp_host is None or tcp_port is None):
+        raise ValueError("tcp_host and tcp_port must both be provided")
+
+    new_path = unix_path if has_unix else f"tcp://{tcp_host}:{tcp_port}"
+
+    old = _client(ctx)
+    new = ProfClient(new_path)
+    old.close()
+    ctx.request_context.lifespan_context["client"] = new
+
+    return new_path
+
+
 if __name__ == "__main__":
     mcp.run()
