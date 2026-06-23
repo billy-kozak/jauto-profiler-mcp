@@ -19,21 +19,38 @@
 ###############################################################################
 
 import json
+from contextlib import asynccontextmanager
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Context
 
 from prof_client import ProfClient, compute_stat_summary
 from time_util import resolve_time_arg
 
 ###############################################################################
+# Lifespan — construct the profiler client once for the server's lifetime
+###############################################################################
+
+@asynccontextmanager
+async def lifespan(server):
+    client = ProfClient()
+    try:
+        yield {"client": client}
+    finally:
+        client.close()
+
+###############################################################################
 # MCP server
 ###############################################################################
 
-mcp = FastMCP("jauto-profiler")
+mcp = FastMCP("jauto-profiler", lifespan=lifespan)
+
+
+def _client(ctx: Context) -> ProfClient:
+    return ctx.request_context.lifespan_context["client"]
 
 
 @mcp.tool()
-def get_loaded_classes() -> list[str]:
+def get_loaded_classes(ctx: Context) -> list[str]:
     """Return all classes currently loaded in the attached JVM.
 
     Use this as the first step to find candidate classes for profiling.
@@ -43,11 +60,11 @@ def get_loaded_classes() -> list[str]:
 
     Example: "org/example/MyService$Handler"
     """
-    return ProfClient().list_loaded_classes()
+    return _client(ctx).list_loaded_classes()
 
 
 @mcp.tool()
-def get_class_methods(class_name: str) -> list[str]:
+def get_class_methods(ctx: Context, class_name: str) -> list[str]:
     """Return the methods of a loaded class as 'name:descriptor' strings.
 
     Call this after get_loaded_classes to get the exact method signatures
@@ -59,11 +76,11 @@ def get_class_methods(class_name: str) -> list[str]:
 
     Example output entry: "doWork:(ILjava/lang/String;)V"
     """
-    return ProfClient().get_class_methods(class_name)
+    return _client(ctx).get_class_methods(class_name)
 
 
 @mcp.tool()
-def instrument_method(class_name: str, method_sig: str) -> dict:
+def instrument_method(ctx: Context, class_name: str, method_sig: str) -> dict:
     """Instrument a method so that entry/exit times and call counts are recorded.
 
     class_name: JVM internal class name (e.g. "org/example/MyClass$Inner")
@@ -83,11 +100,12 @@ def instrument_method(class_name: str, method_sig: str) -> dict:
     a tight inner-loop leaf) will disrupt JIT inlining and can cause 100-350x
     slowdown. Prefer to start with higher-level methods and zoom in gradually.
     """
-    return ProfClient().instrument_method(class_name, method_sig)
+    return _client(ctx).instrument_method(class_name, method_sig)
 
 
 @mcp.tool()
 def instrument_line(
+    ctx: Context,
     entry_class: str,
     entry_line: int,
     exit_line: int,
@@ -109,13 +127,13 @@ def instrument_line(
     Raises on failure.
     """
     resolved_exit_class = exit_class if exit_class is not None else entry_class
-    return ProfClient().instrument_line(
+    return _client(ctx).instrument_line(
         entry_class, resolved_exit_class, entry_line, exit_line
     )
 
 
 @mcp.tool()
-def get_async_errors() -> list[dict]:
+def get_async_errors(ctx: Context) -> list[dict]:
     """Return all errors from the profiler's asynchronous error log.
 
     The log captures errors that could not be reported synchronously —
@@ -131,11 +149,11 @@ def get_async_errors() -> list[dict]:
     holds up to 4096 entries; oldest entries are silently evicted when
     the buffer is full. Reads are non-destructive.
     """
-    return ProfClient().get_async_errors()
+    return _client(ctx).get_async_errors()
 
 
 @mcp.tool()
-def get_instrumented_methods() -> list[dict]:
+def get_instrumented_methods(ctx: Context) -> list[dict]:
     """Return all currently instrumented and deferred probes.
 
     Each entry includes:
@@ -158,11 +176,11 @@ def get_instrumented_methods() -> list[dict]:
     a deferred instrumentation has been promoted to active after its class
     loaded.
     """
-    return ProfClient().list_instrumented_methods()
+    return _client(ctx).list_instrumented_methods()
 
 
 @mcp.tool()
-def deinstrument_by_id(instrument_id: int) -> None:
+def deinstrument_by_id(ctx: Context, instrument_id: int) -> None:
     """Remove instrumentation using the instrument ID returned by instrument_method.
 
     instrument_id: the integer ID returned by a previous instrument_method call
@@ -173,11 +191,11 @@ def deinstrument_by_id(instrument_id: int) -> None:
 
     Raises on failure (e.g. if the ID is not found).
     """
-    ProfClient().deinstrument_by_id(instrument_id)
+    _client(ctx).deinstrument_by_id(instrument_id)
 
 
 @mcp.tool()
-def deinstrument_method(class_name: str, method_sig: str) -> None:
+def deinstrument_method(ctx: Context, class_name: str, method_sig: str) -> None:
     """Remove instrumentation from a previously instrumented method.
 
     class_name: JVM internal class name (e.g. "org/example/MyClass$Inner")
@@ -187,11 +205,11 @@ def deinstrument_method(class_name: str, method_sig: str) -> None:
     Call this when you are done analysing a method so you can move on to
     others without exhausting the slot limit. Raises on failure.
     """
-    ProfClient().deinstrument_method(class_name, method_sig)
+    _client(ctx).deinstrument_method(class_name, method_sig)
 
 
 @mcp.tool()
-def dump_stats(output_file: str) -> str:
+def dump_stats(ctx: Context, output_file: str) -> str:
     """Write profiling statistics for all active probes to a JSON file.
 
     Each entry in the JSON contains:
@@ -218,7 +236,7 @@ def dump_stats(output_file: str) -> str:
     or write a short Python/shell script to analyse the file programmatically.
     Eyeballing snapshot tables leads to systematic errors.
     """
-    stats = ProfClient().get_stats()
+    stats = _client(ctx).get_stats()
     with open(output_file, "w") as f:
         json.dump(stats, f, indent=2)
     return f"Stats written to {output_file}"
@@ -226,6 +244,7 @@ def dump_stats(output_file: str) -> str:
 
 @mcp.tool()
 def stat_summary(
+    ctx: Context,
     name: str,
     start_time: str | float,
     end_time: str | float = 0,
@@ -259,12 +278,12 @@ def stat_summary(
     """
     start = resolve_time_arg(start_time)
     end   = resolve_time_arg(end_time)
-    stats = ProfClient().get_stats()
+    stats = _client(ctx).get_stats()
     return compute_stat_summary(stats, name, start, end)
 
 
 @mcp.tool()
-def shutdown_jvm() -> None:
+def shutdown_jvm(ctx: Context) -> None:
     """Request the profiled JVM to shut down cleanly via System.exit(0).
 
     Sends a shutdown request to the profiler server, which will call
@@ -272,11 +291,11 @@ def shutdown_jvm() -> None:
     of the shutdown. Use this when profiling is complete and you want to stop
     the target application.
     """
-    ProfClient().shutdown()
+    _client(ctx).shutdown()
 
 
 @mcp.tool()
-def pause_threads() -> str:
+def pause_threads(ctx: Context) -> str:
     """Pause all application threads in the attached JVM.
 
     Suspends every non-daemon application thread so the JVM stops making
@@ -288,11 +307,11 @@ def pause_threads() -> str:
 
     Call resume_threads to let the application continue.
     """
-    return ProfClient().pause_threads()
+    return _client(ctx).pause_threads()
 
 
 @mcp.tool()
-def resume_application() -> str:
+def resume_application(ctx: Context) -> str:
     """Resume a paused JVM.
 
     Handles two pause cases with a single command:
@@ -314,7 +333,7 @@ def resume_application() -> str:
     To disable the automatic startup pause, set JAUTO_PROF_PAUSE_ON_START=0 in
     the environment before launching the JVM.
     """
-    return ProfClient().resume()
+    return _client(ctx).resume()
 
 
 if __name__ == "__main__":

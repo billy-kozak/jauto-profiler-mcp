@@ -117,12 +117,16 @@ class ProfClient:
         except OSError:
             pass
 
-    def __del__(self):
+    def close(self):
         if self._sock is not None:
             try:
                 self._sock.close()
             except OSError:
                 pass
+            self._sock = None
+
+    def __del__(self):
+        self.close()
 
     def _connect(self):
         if self._sock is not None:
