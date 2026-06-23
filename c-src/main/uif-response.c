@@ -21,11 +21,14 @@
 #include "util/pstring.h"
 #include "util/hash-tab.h"
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define UIF_SHORT_RESP_MAX_BODY 2048
 
 static int uif_send_short_response(
 	struct user_if *uif,
@@ -34,6 +37,11 @@ static int uif_send_short_response(
 	const void *body,
 	uint32_t body_size
 ) {
+	if (body_size > UIF_SHORT_RESP_MAX_BODY) {
+		assert(false);
+		return -1;
+	}
+
 	size_t total = offsetof(struct user_msg, body) + body_size;
 	uint8_t buf[total];
 	struct user_msg *msg = (struct user_msg *)buf;
@@ -55,7 +63,7 @@ int uif_respond_loaded_classes(
 ) {
 	struct user_msg *response;
 	uint8_t *p;
-	uint32_t body_size;
+	size_t body_size;
 	uint32_t cnt;
 	struct hash_tab_itr itr;
 	struct class_info *ci;
@@ -69,13 +77,17 @@ int uif_respond_loaded_classes(
 		body_size += pstring_total_size(ci->name);
 	}
 
+	if (body_size > UINT32_MAX) {
+		return -1;
+	}
+
 	response = malloc(offsetof(struct user_msg, body) + body_size);
 	if (response == NULL) {
 		return -1;
 	}
 
 	response->type = RESPONSE_LOADED_CLASSES;
-	response->size = body_size;
+	response->size = (uint32_t)body_size;
 	p = response->body.raw;
 
 	cnt = (uint32_t)count;
@@ -101,7 +113,7 @@ int uif_respond_class_methods(
 ) {
 	struct user_msg *response;
 	uint8_t *p;
-	uint32_t body_size;
+	size_t body_size;
 	uint32_t count;
 	size_t i;
 
@@ -113,13 +125,17 @@ int uif_respond_class_methods(
 	}
 	count = (ci != NULL) ? (uint32_t)ci->methods.len : 0;
 
+	if (body_size > UINT32_MAX) {
+		return -1;
+	}
+
 	response = malloc(offsetof(struct user_msg, body) + body_size);
 	if (response == NULL) {
 		return -1;
 	}
 
 	response->type = RESPONSE_CLASS_METHODS;
-	response->size = body_size;
+	response->size = (uint32_t)body_size;
 	p = response->body.raw;
 
 	memcpy(p, &count, sizeof(count));
@@ -224,7 +240,7 @@ int uif_respond_list_instrumented(
 	struct mi_itr itr;
 	struct mi_val result;
 	uint8_t *p;
-	uint32_t body_size;
+	size_t body_size;
 	uint32_t count;
 
 	body_size = sizeof(uint32_t);
@@ -252,13 +268,17 @@ int uif_respond_list_instrumented(
 		count++;
 	}
 
+	if (body_size > UINT32_MAX) {
+		return -1;
+	}
+
 	response = malloc(offsetof(struct user_msg, body) + body_size);
 	if (response == NULL) {
 		return -1;
 	}
 
 	response->type = RESPONSE_LIST_INSTRUMENTED;
-	response->size = body_size;
+	response->size = (uint32_t)body_size;
 	p = response->body.raw;
 
 	memcpy(p, &count, sizeof(count));
