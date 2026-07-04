@@ -130,4 +130,8 @@ int ps_send_usr_rq_instrument_line(
 	uint32_t exit_line
 );
 
+int ps_send_usr_rq_get_status(
+	struct prof_server *ps, struct user_if_client *client
+);
+
 #endif /* _PROF_SERVER_EV_H */

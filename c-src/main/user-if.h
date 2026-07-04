@@ -58,6 +58,8 @@ enum user_msg_type {
 	RESPONSE_DEINSTRUMENT_BY_ID = 20,
 	REQUEST_INSTRUMENT_LINE = 21,
 	RESPONSE_INSTRUMENT_LINE = 22,
+	REQUEST_GET_STATUS = 23,
+	RESPONSE_GET_STATUS = 24,
 };
 
 enum instrument_resp_status {
@@ -159,6 +161,11 @@ struct user_msg_pause_threads_resp {
 	uint32_t status;
 };
 
+struct user_msg_get_status_resp {
+	uint32_t shutting_down;
+	uint32_t paused;
+};
+
 
 struct user_msg_class_list {
 	uint32_t len;
@@ -189,6 +196,7 @@ struct PACKED user_msg {
 		struct user_msg_resume_resp resume_resp;
 		struct user_msg_pause_threads_resp pause_threads_resp;
 		struct user_msg_err_resp err_list_resp;
+		struct user_msg_get_status_resp get_status_resp;
 	} body;
 };
 

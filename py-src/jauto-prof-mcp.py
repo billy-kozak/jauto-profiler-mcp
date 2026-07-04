@@ -337,6 +337,24 @@ def resume_application(ctx: Context) -> str:
 
 
 @mcp.tool()
+def get_status(ctx: Context) -> dict:
+    """Return the current state of the profiler server.
+
+    Returns a dict with:
+      shutting_down  - true if the JVM has begun its shutdown sequence
+                       (JAUTO_PROF_PAUSE_ON_EXIT is holding it at exit)
+      paused         - true if application threads are currently paused,
+                       either from the automatic startup pause or from
+                       a previous pause_threads call
+
+    This is useful for polling the profiler state — for example, to detect
+    that the target JVM has reached exit and is now paused there, so that
+    you can collect final statistics before calling shutdown_jvm.
+    """
+    return _client(ctx).get_status()
+
+
+@mcp.tool()
 def connect(
     ctx: Context,
     unix_path: str | None = None,

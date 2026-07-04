@@ -96,4 +96,11 @@ int uif_respond_instrument_line(
 	uint64_t instrument_id
 );
 
+int uif_respond_get_status(
+	struct user_if *uif,
+	struct user_if_client *client,
+	int shutting_down,
+	int paused
+);
+
 #endif /* _UIF_RESPONSE_H */

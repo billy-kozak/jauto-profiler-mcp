@@ -261,6 +261,8 @@ int ps_uif_handler(
 		return handle_deinstrument_by_id(ps, client, msg);
 	case REQUEST_INSTRUMENT_LINE:
 		return handle_instrument_line(ps, client, msg);
+	case REQUEST_GET_STATUS:
+		return ps_send_usr_rq_get_status(ps, client);
 	default:
 		return -1;
 	}

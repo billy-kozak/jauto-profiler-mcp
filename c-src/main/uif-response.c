@@ -352,6 +352,22 @@ int uif_respond_instrument_line(
 	);
 }
 
+int uif_respond_get_status(
+	struct user_if *uif,
+	struct user_if_client *client,
+	int shutting_down,
+	int paused
+) {
+	struct user_msg_get_status_resp body = {
+		(uint32_t)(shutting_down ? 1 : 0),
+		(uint32_t)(paused ? 1 : 0),
+	};
+
+	return uif_send_short_response(
+		uif, client, RESPONSE_GET_STATUS, &body, sizeof(body)
+	);
+}
+
 int uif_respond_get_async_errors(
 	struct user_if *uif,
 	struct user_if_client *client,

@@ -48,6 +48,8 @@ _MSG_TYPE_REQUEST_DEINSTRUMENT_BY_ID   = 19
 _MSG_TYPE_RESPONSE_DEINSTRUMENT_BY_ID  = 20
 _MSG_TYPE_REQUEST_INSTRUMENT_LINE      = 21
 _MSG_TYPE_RESPONSE_INSTRUMENT_LINE     = 22
+_MSG_TYPE_REQUEST_GET_STATUS           = 23
+_MSG_TYPE_RESPONSE_GET_STATUS          = 24
 
 _LISTED_INSTR_ACTIVE   = 0
 _LISTED_INSTR_DEFERRED = 1
@@ -508,6 +510,20 @@ class ProfClient:
             raise RuntimeError("instrument_line failed")
 
         return {"status": "ok", "instrument_id": instrument_id}
+
+    def get_status(self) -> dict:
+
+        resp = self._send_request(_MSG_TYPE_REQUEST_GET_STATUS)
+
+        if resp.message_type != _MSG_TYPE_RESPONSE_GET_STATUS:
+            raise ValueError("Unexpected response")
+
+        shutting_down, paused = struct.unpack("<II", resp.raw_body)
+
+        return {
+            "shutting_down": bool(shutting_down),
+            "paused": bool(paused),
+        }
 
     def deinstrument_by_id(self, instrument_id: int) -> None:
 

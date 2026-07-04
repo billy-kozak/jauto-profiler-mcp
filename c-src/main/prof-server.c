@@ -60,6 +60,7 @@ struct prof_server {
 	pthread_mutex_t resume_mutex;
 	pthread_cond_t resume_cond;
 	int paused;
+	int shutting_down;
 	struct instr_ctx instr_ctx;
 	int thread_running;
 	jthread agent_thread;
@@ -412,6 +413,7 @@ static void handle_shutdown_starting(
 	struct prof_server *ps, JNIEnv *jni_env, struct ps_msg *msg
 ) {
 	free(msg);
+	ps->shutting_down = 1;
 	jvm_prepare_shutdown(&ps->shutdown_blocker, jni_env);
 }
 
@@ -440,6 +442,27 @@ static void handle_usr_rq_resume(
 	}
 
 	uif_respond_resume(ps->uif, client, status);
+	uif_client_release(client);
+}
+
+static void handle_usr_rq_get_status(
+	struct prof_server *ps,
+	struct ps_msg *msg
+) {
+	struct user_if_client *client = msg->body.usr_rq_get_status.client;
+	int paused;
+
+	free(msg);
+
+	pthread_mutex_lock(&ps->resume_mutex);
+	paused = ps->paused;
+	pthread_mutex_unlock(&ps->resume_mutex);
+
+	if (!paused) {
+		paused = ps->thread_pause->suspended_count > 0;
+	}
+
+	uif_respond_get_status(ps->uif, client, ps->shutting_down, paused);
 	uif_client_release(client);
 }
 
@@ -484,6 +507,9 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 		break;
 	case USR_RQ_INSTRUMENT_LINE:
 		handle_usr_rq_instrument_line(ps, jni_env, msg);
+		break;
+	case USR_RQ_GET_STATUS:
+		handle_usr_rq_get_status(ps, msg);
 		break;
 	case PS_SHUTDOWN:
 		free(msg);
@@ -553,6 +579,7 @@ struct prof_server *ps_init(void)
 	ps->agent_thread = NULL;
 	ps->paused = prof_pause_on_start();
 	ps->pause_on_exit = prof_pause_on_exit();
+	ps->shutting_down = 0;
 	prof_err_log_init(&ps->err_log);
 
 	if (ih_ctx_init(&ps->instr_ctx) != 0) {

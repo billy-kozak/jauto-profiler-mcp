@@ -121,6 +121,10 @@ def cmd_get_async_errors(client, args):
         print(f"{ts}\t{entry['message']}")
 
 
+def cmd_get_status(client, args):
+    print(json.dumps(client.get_status(), indent=2))
+
+
 
 ###############################################################################
 # entry point
@@ -234,6 +238,11 @@ def main():
         help='show errors from the asynchronous error log'
     )
 
+    sub.add_parser(
+        'get-status',
+        help='query profiler state (paused, shutting_down)'
+    )
+
     args = parser.parse_args()
 
     if args.tcp is not None:
@@ -257,6 +266,7 @@ def main():
         'pause-threads':      ClientCmd(client, cmd_pause_threads),
         'list-instrumented':  ClientCmd(client, cmd_list_instrumented),
         'get-async-errors':   ClientCmd(client, cmd_get_async_errors),
+        'get-status':         ClientCmd(client, cmd_get_status),
     }
 
     try:
