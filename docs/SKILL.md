@@ -70,6 +70,8 @@ The target JVM must have been launched with two extra flags:
 - `JAUTO_PROF_LOG`:  sets the path where the profiler writes its debug log.
 - `JAUTO_PROF_LOG_LEVEL`: sets the log level to one of OFF, WARN, INFO, DEBUG.
 - `JAUTO_PROF_PAUSE_ON_START`: set to zero to disable the automatic pause on start behaviour.
+- `JAUTO_PROF_PAUSE_ON_EXIT`: set to zero to disable the automatic pause on exit behaviour. By default, the JVM will
+  pause on exit until the profiler client sends a `shutdown` command, allowing final statistics to be collected.
 
 ---
 

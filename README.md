@@ -27,6 +27,10 @@ has absolutley no security, use at your own risk.
 By default, the target will pause VM execution after the profiler initializes. Set `$JAUTO_PROF_PAUSE_ON_START=0` to
 disable this behaviour, otherwise, use the `resume` command to start execution of the target.
 
+By default, the target will also pause on JVM exit until the profiler client sends a `shutdown` command. This allows
+the profiler to collect final statistics before the JVM exits. Set `$JAUTO_PROF_PAUSE_ON_EXIT=0` to disable this
+behaviour and allow the JVM to exit immediately.
+
 # Building
 
 Run `build-src/setup` to create the Python venv.
