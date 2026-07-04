@@ -402,9 +402,17 @@ static void handle_shutdown_request(
 	}
 
 	if (ps->pause_on_exit) {
+		jvm_prepare_shutdown(&ps->shutdown_blocker, jni_env);
 		jvm_unblock_shutdown(&ps->shutdown_blocker);
 	}
 	jni_system_exit(jni_env, exit_code);
+}
+
+static void handle_shutdown_starting(
+	struct prof_server *ps, JNIEnv *jni_env, struct ps_msg *msg
+) {
+	free(msg);
+	jvm_prepare_shutdown(&ps->shutdown_blocker, jni_env);
 }
 
 static void handle_usr_rq_resume(
@@ -484,6 +492,9 @@ static int dispatch(struct prof_server *ps, JNIEnv *jni_env, void *raw)
 	case PS_SHUTDOWN_REQUEST:
 		handle_shutdown_request(ps, jni_env, msg);
 		ret = 0;
+		break;
+	case PS_SHUTDOWN_STARTING:
+		handle_shutdown_starting(ps, jni_env, msg);
 		break;
 	default:
 		free(msg);
@@ -619,7 +630,7 @@ struct prof_server *ps_start(
 
 	if (ps->pause_on_exit) {
 		if (jvm_register_shutdown_blocker(
-			&ps->shutdown_blocker, jni_env
+			&ps->shutdown_blocker, jni_env, ps->ev_q
 		) != 0) {
 			return NULL;
 		}

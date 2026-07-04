@@ -237,6 +237,33 @@ int jni_get_profiler_stats(JNIEnv *env, uint8_t **buf_out, size_t *len_out)
 	return 0;
 }
 
+int jni_stop_profiler_collector(JNIEnv *env)
+{
+	jmethodID stop_method;
+
+	if (registry_class == NULL) {
+		return -1;
+	}
+
+	stop_method = (*env)->GetStaticMethodID(
+		env, registry_class, "stopCollector", "()V"
+	);
+	if (stop_method == NULL) {
+		LOG_ERROR("GetStaticMethodID stopCollector failed");
+		return -1;
+	}
+
+	(*env)->CallStaticVoidMethod(env, registry_class, stop_method);
+
+	if ((*env)->ExceptionCheck(env)) {
+		(*env)->ExceptionClear(env);
+		LOG_ERROR("stopCollector threw an exception");
+		return -1;
+	}
+
+	return 0;
+}
+
 static int check_loader_match(
 	JNIEnv *env, jvmtiEnv *jvmti, jclass cls, jobject loader
 ) {

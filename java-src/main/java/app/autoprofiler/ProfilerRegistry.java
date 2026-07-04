@@ -76,6 +76,10 @@ public class ProfilerRegistry {
         INSTANCE.entries.get(id).profiler.active = false;
     }
 
+    static void stopCollector() {
+        INSTANCE.collectorThread.interrupt();
+    }
+
     static byte[] getStats() {
         List<ProfilerEntry> snapshot = new ArrayList<>();
         for (ProfilerEntry e : INSTANCE.entries) {

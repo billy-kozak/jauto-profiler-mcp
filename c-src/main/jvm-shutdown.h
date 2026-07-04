@@ -21,14 +21,21 @@
 #include <jni.h>
 #include <semaphore.h>
 
+struct ev_queue;
+
 struct jvm_shutdown_blocker {
+	sem_t started_sem;
 	sem_t sem;
+	struct ev_queue *ev_q;
 };
 
 int jvm_register_shutdown_hook(JNIEnv *env);
 int jvm_register_shutdown_blocker(
-	struct jvm_shutdown_blocker *blocker, JNIEnv *env
+	struct jvm_shutdown_blocker *blocker,
+	JNIEnv *env,
+	struct ev_queue *ev_q
 );
+void jvm_prepare_shutdown(struct jvm_shutdown_blocker *blocker, JNIEnv *env);
 void jvm_unblock_shutdown(struct jvm_shutdown_blocker *blocker);
 
 #endif /* _JVM_SHUTDOWN_H */
