@@ -71,6 +71,9 @@ DIST_DIR := build/dist
 DIST_NAME := jauto-prof
 DIST_ROOT := $(DIST_DIR)/$(DIST_NAME)
 
+VERSION_FILE := docs/version.txt
+VERSION := $(shell cat $(VERSION_FILE))
+
 CSRC_ROOT = c-src
 CSRC_DIRS = $(shell find $(CSRC_ROOT) -type d)
 
@@ -88,7 +91,7 @@ OUT_LIB := $(OUTPUT_DIR)/jauto-profiler.so
 JAR_FILE := $(OUTPUT_DIR)/jauto-prof-lib.jar
 
 BIN_FILES := $(OUT_LIB) $(JAR_FILE)
-OUT_DIST := $(DIST_DIR)/jauto-prof.tar.gz
+OUT_DIST := $(DIST_DIR)/jauto-prof-linux-x86_64-v$(VERSION).tar.gz
 
 C_FILES = $(shell find $(CSRC_MAIN) -name "*.c")
 O_FILES = $(C_FILES:$(CSRC_ROOT)/%.c=$(OBJ_DIR)/%.o)
@@ -195,13 +198,14 @@ $(CLASS_FILES): $(JAVA_BUILD_DIR)/%.class: $(JSRC_ROOT)/%.java | $(ASM_JAR)
 
 $(OUT_DIST): COPYING COPYING.LESSER $(MCP_DIST)
 $(OUT_DIST): $(BIN_FILES) $(PYSRC_FILES) $(SETUP_DIST)
-$(OUT_DIST): $(SKILL_DOC) $(DIST_README)
+$(OUT_DIST): $(SKILL_DOC) $(DIST_README) $(VERSION_FILE)
 	rm -rf $(DIST_ROOT)
 	mkdir -p $(DIST_ROOT)
 	$(call prefix_inst,./,$(PYSRC_FILES),$(DIST_ROOT))
 	$(call prefix_inst,./,$(BIN_FILES),$(DIST_ROOT))
 	$(call prefix_inst,./,COPYING COPYING.LESSER,$(DIST_ROOT))
 	$(call prefix_inst,./,$(SKILL_DOC),$(DIST_ROOT))
+	$(call prefix_inst,./,$(VERSION_FILE),$(DIST_ROOT))
 	install -D $(MCP_DIST) $(DIST_ROOT)/bin
 	install $(SETUP_DIST) $(DIST_ROOT)
 	install $(DIST_README) $(DIST_ROOT)/README.md
