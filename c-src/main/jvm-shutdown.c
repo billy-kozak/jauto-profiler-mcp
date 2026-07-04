@@ -22,6 +22,7 @@
 #include "util/log.h"
 
 #include <jni.h>
+#include <semaphore.h>
 
 #define LOG_TAG "jvm-shutdown"
 
@@ -31,10 +32,31 @@ static void log_shutdown_callback(void *data)
 	LOG_INFO("JVM shutdown hook called");
 }
 
+static void shutdown_wait_callback(void *data)
+{
+	struct jvm_shutdown_blocker *blocker = (struct jvm_shutdown_blocker *)data;
+	sem_wait(&blocker->sem);
+}
+
 int jvm_register_shutdown_hook(JNIEnv *env)
 {
 	if (jni_register_shutdown_hook(env) != 0) {
 		return -1;
 	}
 	return jni_add_shutdown_callback(env, log_shutdown_callback, NULL);
+}
+
+void jvm_unblock_shutdown(struct jvm_shutdown_blocker *blocker)
+{
+	sem_post(&blocker->sem);
+}
+
+int jvm_register_shutdown_blocker(
+	struct jvm_shutdown_blocker *blocker, JNIEnv *env
+) {
+	if (sem_init(&blocker->sem, 0, 0) != 0) {
+		LOG_ERROR("sem_init for shutdown blocker failed");
+		return -1;
+	}
+	return jni_add_shutdown_callback(env, shutdown_wait_callback, blocker);
 }

@@ -55,6 +55,8 @@ struct prof_server {
 	struct user_if *uif;
 	jvmtiEnv *jvmti;
 	sem_t shutdown_sem;
+	struct jvm_shutdown_blocker shutdown_blocker;
+	int pause_on_exit;
 	pthread_mutex_t resume_mutex;
 	pthread_cond_t resume_cond;
 	int paused;
@@ -399,6 +401,9 @@ static void handle_shutdown_request(
 		_exit(exit_code);
 	}
 
+	if (ps->pause_on_exit) {
+		jvm_unblock_shutdown(&ps->shutdown_blocker);
+	}
 	jni_system_exit(jni_env, exit_code);
 }
 
@@ -536,6 +541,7 @@ struct prof_server *ps_init(void)
 	ps->thread_running = 0;
 	ps->agent_thread = NULL;
 	ps->paused = prof_pause_on_start();
+	ps->pause_on_exit = prof_pause_on_exit();
 	prof_err_log_init(&ps->err_log);
 
 	if (ih_ctx_init(&ps->instr_ctx) != 0) {
@@ -609,6 +615,14 @@ struct prof_server *ps_start(
 
 	if (jvm_register_shutdown_hook(jni_env) != 0) {
 		return NULL;
+	}
+
+	if (ps->pause_on_exit) {
+		if (jvm_register_shutdown_blocker(
+			&ps->shutdown_blocker, jni_env
+		) != 0) {
+			return NULL;
+		}
 	}
 
 	thread_class = (*jni_env)->FindClass(jni_env, "java/lang/Thread");

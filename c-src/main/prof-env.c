@@ -88,3 +88,12 @@ int prof_pause_on_start(void)
 	}
 	return strcmp(val, "0") != 0;
 }
+
+int prof_pause_on_exit(void)
+{
+	const char *val = getenv(PAUSE_ON_EXIT_ENV_VAR);
+	if (val == NULL) {
+		return 1;
+	}
+	return strcmp(val, "0") != 0;
+}

@@ -20,8 +20,9 @@
 
 #include <stdint.h>
 
-#define SOCKET_ENV_VAR "JAUTO_PROF_SOCKET"
-#define PAUSE_ENV_VAR  "JAUTO_PROF_PAUSE_ON_START"
+#define SOCKET_ENV_VAR        "JAUTO_PROF_SOCKET"
+#define PAUSE_ENV_VAR         "JAUTO_PROF_PAUSE_ON_START"
+#define PAUSE_ON_EXIT_ENV_VAR "JAUTO_PROF_PAUSE_ON_EXIT"
 
 enum prof_socket_type {
 	PROF_SOCKET_UNIX,
@@ -43,5 +44,6 @@ struct prof_socket_spec {
 
 int prof_socket(struct prof_socket_spec *out);
 int prof_pause_on_start(void);
+int prof_pause_on_exit(void);
 
 #endif /* _PROF_ENV_H */
