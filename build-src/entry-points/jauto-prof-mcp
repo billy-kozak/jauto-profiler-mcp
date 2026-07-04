@@ -25,4 +25,4 @@ VENV="$ROOT/.venv"
 
 export PYTHONPATH="${ROOT}/py-src"
 
-exec "$VENV/bin/python3" "$ROOT/py-src/jauto-prof-mcp.py" ${@}
+exec "$VENV/bin/python3" -m jauto_profiler.mcp_server ${@}

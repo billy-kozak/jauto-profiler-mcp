@@ -22,8 +22,8 @@ import argparse
 import json
 import sys
 
-from prof_client import ProfClient, compute_stat_summary
-from time_util import parse_time_arg
+from .prof_client import ProfClient, compute_stat_summary
+from .time_util import parse_time_arg
 
 ###############################################################################
 # subcommand handlers

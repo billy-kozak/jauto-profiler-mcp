@@ -9,10 +9,8 @@ requires-python = ">=3.10"
 dependencies = ["mcp"]
 
 [project.scripts]
-jauto-prof = "jauto_prof_cli:main"
+jauto-prof = "jauto_profiler.jauto_prof_cli:main"
 
-[tool.setuptools]
-py-modules = ["prof_client", "jauto_prof_cli"]
-
-[tool.setuptools.package-dir]
-"" = "."
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["jauto_profiler*"]

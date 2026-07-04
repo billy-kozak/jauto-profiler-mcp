@@ -23,4 +23,4 @@ ROOT="$(dirname "${SCRIPT_HOME}")"
 
 VENV="$ROOT/.venv"
 export PYTHONPATH="${ROOT}/py-src"
-exec "$VENV/bin/python3" "$ROOT/py-src/jauto_prof_cli.py" ${@}
+exec "$VENV/bin/python3" -m jauto_profiler.jauto_prof_cli ${@}

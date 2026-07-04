@@ -23,8 +23,8 @@ from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP, Context
 
-from prof_client import ProfClient, compute_stat_summary
-from time_util import resolve_time_arg
+from .prof_client import ProfClient, compute_stat_summary
+from .time_util import resolve_time_arg
 
 ###############################################################################
 # Lifespan — construct the profiler client once for the server's lifetime

@@ -30,4 +30,4 @@ ln -sf "$VENV/bin/jauto-prof" "$ROOT/bin/jauto-prof"
 
 echo "Setup complete."
 echo "  CLI:        $ROOT/bin/jauto-prof"
-echo "  MCP server: $VENV/bin/python $ROOT/py-src/jauto-prof-mcp.py"
+echo "  MCP server: PYTHONPATH=$ROOT/py-src $VENV/bin/python -m jauto_profiler.mcp_server"
