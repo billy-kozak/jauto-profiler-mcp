@@ -32,6 +32,7 @@
 #include "jni/jni-profiler.h"
 #include "jni/jni-util.h"
 #include "jni/bc-instrument.h"
+#include "jvm-shutdown.h"
 #include "ps-thread-state.h"
 #include "instrument-handler.h"
 #include "prof-err-log.h"
@@ -605,6 +606,10 @@ struct prof_server *ps_start(
 	jvmtiError err;
 
 	ps->jvmti = jvmti;
+
+	if (jvm_register_shutdown_hook(jni_env) != 0) {
+		return NULL;
+	}
 
 	thread_class = (*jni_env)->FindClass(jni_env, "java/lang/Thread");
 	if (thread_class == NULL) {
