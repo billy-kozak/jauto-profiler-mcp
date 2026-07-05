@@ -21,6 +21,7 @@
 import argparse
 import json
 import sys
+import socket
 
 from .prof_client import ProfClient, compute_stat_summary
 from .time_util import parse_time_arg
@@ -166,6 +167,21 @@ def main():
         ),
     )
 
+    parser.add_argument(
+        '--sock-timeout', metavar='SECONDS', type=float, default=None,
+        help=(
+            'timeout in seconds for individual socket operations '
+            '(default: block indefinitely)'
+        ),
+    )
+    parser.add_argument(
+        '--resp-timeout', metavar='SECONDS', type=float, default=0.0,
+        help=(
+            'total timeout in seconds to wait for a complete response '
+            '(default: no response deadline, use --sock-timeout instead)'
+        ),
+    )
+
     sub = parser.add_subparsers(dest='command', required=True)
 
     sub.add_parser('get-classes', help='list classes loaded in the JVM')
@@ -250,7 +266,11 @@ def main():
     else:
         socket_path = args.socket  # None falls through to env var / default
 
-    client = ProfClient(socket_path)
+    client = ProfClient(
+        socket_path,
+        sock_timeout=args.sock_timeout,
+        resp_timeout=args.resp_timeout,
+    )
 
     commands = {
         'get-classes':        ClientCmd(client, cmd_get_classes),
@@ -271,7 +291,7 @@ def main():
 
     try:
         commands[args.command](args)
-    except (RuntimeError, ConnectionError, ValueError, OSError) as e:
+    except (RuntimeError, ConnectionError, ValueError, OSError, socket.timeout) as e:
         print(f'error: {e}', file=sys.stderr)
         sys.exit(1)
     except Exception as e:

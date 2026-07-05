@@ -21,6 +21,7 @@
 import os
 import socket
 import struct
+import time
 
 SOCKET_ENV_VAR = "JAUTO_PROF_SOCKET"
 DEFAULT_SOCKET_PATH = "/tmp/jauto-profiler.sock"
@@ -109,11 +110,18 @@ class pstring:
 
 class ProfClient:
 
-    def __init__(self, path: str | None = None):
+    def __init__(
+        self,
+        path: str | None = None,
+        sock_timeout: float | None = None,
+        resp_timeout: float = 0.0
+    ):
         if path is None:
             path = os.environ.get(SOCKET_ENV_VAR, DEFAULT_SOCKET_PATH)
         self._path = path
         self._sock = None
+        self._sock_timeout = sock_timeout
+        self._resp_timeout = resp_timeout
         try:
             self._connect()
         except OSError:
@@ -142,6 +150,7 @@ class ProfClient:
             rest = self._path[len('tcp://'):]
             host, port_str = rest.rsplit(':', 1)
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(self._sock_timeout)
             try:
                 sock.connect((host, int(port_str)))
             except OSError:
@@ -160,8 +169,22 @@ class ProfClient:
     def _recv_msg(self) -> RawMsg:
         hdr = bytearray()
 
+        if self._resp_timeout > 0.0:
+            end = time.monotonic() + self._resp_timeout
+            def recv(size):
+                left = max(end - time.monotonic(), 0.0)
+                self._sock.settimeout(left)
+                try:
+                    return self._sock.recv(size)
+                finally:
+                    self._sock.settimeout(self._sock_timeout)
+        else:
+            def recv(size):
+                self._sock.settimeout(self._sock_timeout)
+                return self._sock.recv(size)
+
         while len(hdr) < _HDR_SIZE:
-            chunk = self._sock.recv(_HDR_SIZE - len(hdr))
+            chunk = recv(_HDR_SIZE - len(hdr))
             if not chunk:
                 raise ConnectionError("connection closed before full message received")
             hdr.extend(chunk)
@@ -170,7 +193,7 @@ class ProfClient:
         body = bytearray()
 
         while len(body) < body_size:
-            chunk = self._sock.recv(body_size - len(body))
+            chunk = recv(body_size - len(body))
             if not chunk:
                 raise ConnectionError("connection closed before full message received")
             body.extend(chunk)
