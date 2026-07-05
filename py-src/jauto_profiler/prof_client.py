@@ -397,7 +397,7 @@ class ProfClient:
 
         return "paused" if status == _PAUSE_THREADS_STATUS_OK else "already_paused"
 
-    def get_instrumented_methods(self) -> list[dict]:
+    def get_instruments(self) -> list[dict]:
 
         resp = self._send_request(_MSG_TYPE_REQUEST_LIST_INSTRUMENTED)
 

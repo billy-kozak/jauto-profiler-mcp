@@ -95,7 +95,7 @@ def _complete_classes(prefix, socket_path):
 
 def _complete_instrumented_classes(prefix, socket_path):
     """Class-name completion: only classes with an instrumented method."""
-    entries = _query_profiler(socket_path, ProfClient.get_instrumented_methods)
+    entries = _query_profiler(socket_path, ProfClient.get_instruments)
     if entries is None:
         return []
     classes = {e['class_name'] for e in entries if e.get('type') == 'method'}
@@ -112,7 +112,7 @@ def _complete_methods(class_name, prefix, socket_path):
 
 def _complete_instrumented_methods(class_name, prefix, socket_path):
     """Method-signature completion: only methods instrumented on this class."""
-    entries = _query_profiler(socket_path, ProfClient.get_instrumented_methods)
+    entries = _query_profiler(socket_path, ProfClient.get_instruments)
     if entries is None:
         return []
     methods = {
@@ -133,7 +133,7 @@ def _complete_stat_names(prefix, socket_path):
 
 def _complete_instrument_ids(prefix, socket_path):
     """Instrument-ID completion: IDs of all instrumented/deferred entries."""
-    entries = _query_profiler(socket_path, ProfClient.get_instrumented_methods)
+    entries = _query_profiler(socket_path, ProfClient.get_instruments)
     if entries is None:
         return []
     ids = {str(e['instrument_id']) for e in entries}

@@ -153,7 +153,7 @@ def get_async_errors(ctx: Context) -> list[dict]:
 
 
 @mcp.tool()
-def get_instrumented_methods(ctx: Context) -> list[dict]:
+def get_instruments(ctx: Context) -> list[dict]:
     """Return all currently instrumented and deferred probes.
 
     Each entry includes:
@@ -176,7 +176,7 @@ def get_instrumented_methods(ctx: Context) -> list[dict]:
     a deferred instrumentation has been promoted to active after its class
     loaded.
     """
-    return _client(ctx).get_instrumented_methods()
+    return _client(ctx).get_instruments()
 
 
 @mcp.tool()
@@ -187,7 +187,7 @@ def deinstrument_by_id(ctx: Context, instrument_id: int) -> None:
 
     Removes the instrumentation without requiring the original class name or
     method signature. Handles both active and deferred instrumentations. Use
-    get_instrumented_methods to look up instrument IDs if needed.
+    get_instruments to look up instrument IDs if needed.
 
     Raises on failure (e.g. if the ID is not found).
     """
@@ -254,7 +254,7 @@ def stat_summary(
     Fetches the current profiler stats and summarises the named probe for
     the window [start_time, end_time] (inclusive).
 
-    name: profiler name as returned by dump_stats or get_instrumented_methods
+    name: profiler name as returned by dump_stats or get_instruments
           (for methods this is "className:methodSig")
 
     start_time and end_time accept two forms:

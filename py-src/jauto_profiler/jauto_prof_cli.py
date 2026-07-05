@@ -100,8 +100,8 @@ def cmd_pause_threads(client, args):
     print(client.pause_threads())
 
 
-def cmd_get_instrumented(client, args):
-    for entry in client.get_instrumented_methods():
+def cmd_get_instruments(client, args):
+    for entry in client.get_instruments():
         if entry.get('type') == 'line':
             print(
                 f"{entry['status']}\t{entry['instrument_id']}"
@@ -245,8 +245,8 @@ def build_parser():
     sub.add_parser('pause-threads', help='suspend all application threads')
 
     sub.add_parser(
-        'get-instrumented',
-        help='list all instrumented and deferred methods'
+        'get-instruments',
+        help='list all instrumented and deferred probes'
     )
 
     sub.add_parser(
@@ -289,7 +289,7 @@ def main():
         'shutdown':           ClientCmd(client, cmd_shutdown),
         'resume':             ClientCmd(client, cmd_resume),
         'pause-threads':      ClientCmd(client, cmd_pause_threads),
-        'get-instrumented':   ClientCmd(client, cmd_get_instrumented),
+        'get-instruments':    ClientCmd(client, cmd_get_instruments),
         'get-async-errors':   ClientCmd(client, cmd_get_async_errors),
         'get-status':         ClientCmd(client, cmd_get_status),
     }
