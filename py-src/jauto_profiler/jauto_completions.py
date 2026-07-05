@@ -131,6 +131,15 @@ def _complete_stat_names(prefix, socket_path):
     return [n for n in names if n.startswith(prefix)]
 
 
+def _complete_instrument_ids(prefix, socket_path):
+    """Instrument-ID completion: IDs of all instrumented/deferred entries."""
+    entries = _query_profiler(socket_path, ProfClient.get_instrumented_methods)
+    if entries is None:
+        return []
+    ids = {str(e['instrument_id']) for e in entries}
+    return [i for i in ids if i.startswith(prefix)]
+
+
 ###############################################################################
 # argparse introspection helpers
 ###############################################################################
@@ -241,10 +250,18 @@ def _complete_stat_summary(subparser, words_after, cur, socket_path):
     return []
 
 
+def _complete_deinstrument_by_id(subparser, words_after, cur, socket_path):
+    positionals, pending = _split_args(_option_map(subparser), words_after)
+    if pending is None and len(positionals) == 0:  # id
+        return _complete_instrument_ids(cur, socket_path)
+    return []
+
+
 _SUBCOMMAND_COMPLETERS = {
     'instrument-method': _complete_instrument_method,
     'instrument-line': _complete_instrument_line,
     'deinstrument-method': _complete_deinstrument_method,
+    'deinstrument-by-id': _complete_deinstrument_by_id,
     'dump-stats': _complete_dump_stats,
     'stat-summary': _complete_stat_summary,
 }
