@@ -122,6 +122,15 @@ def _complete_instrumented_methods(class_name, prefix, socket_path):
     return [m for m in methods if m.startswith(prefix)]
 
 
+def _complete_stat_names(prefix, socket_path):
+    """Instrument-name completion: names present in the current stats snapshot."""
+    stats = _query_profiler(socket_path, ProfClient.get_stats)
+    if stats is None:
+        return []
+    names = {s['name'] for s in stats}
+    return [n for n in names if n.startswith(prefix)]
+
+
 ###############################################################################
 # argparse introspection helpers
 ###############################################################################
@@ -222,11 +231,22 @@ def _complete_dump_stats(subparser, words_after, cur, socket_path):
     return []
 
 
+def _complete_stat_summary(subparser, words_after, cur, socket_path):
+    positionals, pending = _split_args(_option_map(subparser), words_after)
+    if pending is not None:
+        return []
+    if len(positionals) == 0:  # name
+        return _complete_stat_names(cur, socket_path)
+    # start (1), end (2): no completion
+    return []
+
+
 _SUBCOMMAND_COMPLETERS = {
     'instrument-method': _complete_instrument_method,
     'instrument-line': _complete_instrument_line,
     'deinstrument-method': _complete_deinstrument_method,
     'dump-stats': _complete_dump_stats,
+    'stat-summary': _complete_stat_summary,
 }
 
 
