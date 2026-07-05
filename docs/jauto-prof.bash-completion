@@ -19,6 +19,11 @@
 ###############################################################################
 # Bash tab completion for the jauto-prof CLI.
 #
+# This is scaffolding only: it locates the "jauto-completions" helper that
+# ships next to jauto-prof and hands it COMP_WORDS; the helper (Python) does
+# the actual completion logic and prints one candidate per line, which
+# becomes COMPREPLY.
+#
 # Source this file (e.g. from ~/.bashrc) and make sure `jauto-prof` is on
 # $PATH. If you invoke it via a path instead (e.g. ./scripts/jauto-prof or
 # bin/jauto-prof), register that literal invocation too:
@@ -28,81 +33,18 @@
 
 _jauto_prof_completions()
 {
-	local cur prev subcommand i
+	local cmd_path completions_script
 
-	local commands=(
-		get-classes
-		get-methods
-		instrument-method
-		instrument-line
-		deinstrument-method
-		deinstrument-by-id
-		shutdown
-		dump-stats
-		stat-summary
-		resume
-		pause-threads
-		get-instrumented
-		get-async-errors
-		get-status
-	)
-	local global_opts=(
-		--socket
-		--tcp
-		--sock-timeout
-		--resp-timeout
-		-h
-		--help
-	)
-
-	COMPREPLY=()
-	cur="${COMP_WORDS[COMP_CWORD]}"
-	prev="${COMP_WORDS[COMP_CWORD - 1]}"
-
-	# Find the first word that is a subcommand, skipping global options and
-	# their values.
-	subcommand=
-	i=1
-	while [ "${i}" -lt "${COMP_CWORD}" ]; do
-		case "${COMP_WORDS[i]}" in
-		--socket|--tcp|--sock-timeout|--resp-timeout)
-			i=$((i + 2))
-			continue
-			;;
-		-h|--help)
-			i=$((i + 1))
-			continue
-			;;
-		-*)
-			i=$((i + 1))
-			continue
-			;;
-		*)
-			subcommand="${COMP_WORDS[i]}"
-			break
-			;;
-		esac
-	done
-
-	if [ -z "${subcommand}" ]; then
-		case "${prev}" in
-		--socket)
-			COMPREPLY=($(compgen -f -- "${cur}"))
-			return
-			;;
-		--tcp|--sock-timeout|--resp-timeout)
-			return
-			;;
-		esac
-		COMPREPLY=($(compgen -W "${commands[*]} ${global_opts[*]}" -- "${cur}"))
-		return
+	cmd_path="$1"
+	if [[ "${cmd_path}" != */* ]]; then
+		cmd_path="$(type -P -- "${cmd_path}")" || return
 	fi
 
-	case "${subcommand}" in
-	dump-stats)
-		COMPREPLY=($(compgen -f -- "${cur}"))
-		;;
-	esac
+	completions_script="$(dirname -- "${cmd_path}")/jauto-completions"
+	[ -f "${completions_script}" ] || return
+
+	COMPREPLY=()
+	mapfile -t COMPREPLY < <(bash "${completions_script}" "${COMP_WORDS[@]}")
 }
 
 complete -F _jauto_prof_completions jauto-prof

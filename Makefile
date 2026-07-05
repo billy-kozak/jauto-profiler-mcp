@@ -107,6 +107,7 @@ GEN_PYPROJECT := $(PY_BUILD_DIR)/pyproject.toml
 
 SETUP_DIST = build-src/setup
 MCP_DIST = $(BUILDSRC_ROOT)/entry-points/jauto-prof-mcp
+COMPLETIONS_DIST = $(BUILDSRC_ROOT)/entry-points/jauto-completions
 SKILL_DOC = docs/SKILL.md
 COMPLETION_DOC = docs/jauto-prof.bash-completion
 DIST_README = docs/dist-README.md
@@ -204,7 +205,7 @@ $(CLASS_FILES): $(JAVA_BUILD_DIR)/%.class: $(JSRC_ROOT)/%.java | $(ASM_JAR)
 	$(JAVAC) $(JAVACFLAGS) \
 		-d $(JAVA_BUILD_DIR) -sourcepath $(JSRC_ROOT) $<
 
-$(OUT_DIST): COPYING COPYING.LESSER $(MCP_DIST)
+$(OUT_DIST): COPYING COPYING.LESSER $(MCP_DIST) $(COMPLETIONS_DIST)
 $(OUT_DIST): $(BIN_FILES) $(PYSRC_FILES) $(SETUP_DIST) $(GEN_PYPROJECT)
 $(OUT_DIST): $(SKILL_DOC) $(COMPLETION_DOC) $(DIST_README) $(VERSION_FILE)
 	rm -rf $(DIST_ROOT)
@@ -217,6 +218,7 @@ $(OUT_DIST): $(SKILL_DOC) $(COMPLETION_DOC) $(DIST_README) $(VERSION_FILE)
 	$(call prefix_inst,./,$(VERSION_FILE),$(DIST_ROOT))
 	install -D $(GEN_PYPROJECT) $(DIST_ROOT)/$(PYSRC_ROOT)/pyproject.toml
 	install -D $(MCP_DIST) $(DIST_ROOT)/bin
+	install -m 0644 -D $(COMPLETIONS_DIST) $(DIST_ROOT)/bin
 	install $(SETUP_DIST) $(DIST_ROOT)
 	install $(DIST_README) $(DIST_ROOT)/README.md
 	tar cvzf $(@) -C $(DIST_DIR) $(DIST_NAME)

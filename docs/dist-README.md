@@ -10,6 +10,7 @@ server and associated tools for JVM profiling automation.
 | `bin/jauto-profiler.so` | JVMTI agent library — attach to the target JVM via `-agentpath:jauto-profiler.so` |
 | `bin/jauto-prof-lib.jar` | Profiler support JAR — add to the target JVM via `-Xbootclasspath/a:jauto-prof-lib.jar` |
 | `bin/jauto-prof-mcp` | MCP server entry point — register this with your agent harness |
+| `bin/jauto-completions` | Bash tab completion helper — not meant to be run by hand, see below |
 | `py-src/` | Python source for the MCP server and CLI |
 | `docs/SKILL.md` | Agent skill guide — install this in your agent harness (see below) |
 | `docs/jauto-prof.bash-completion` | Bash tab completion for the CLI (see below) |

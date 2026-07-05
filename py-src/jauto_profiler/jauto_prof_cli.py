@@ -147,7 +147,7 @@ def _tcp_addr(value):
     return value
 
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser(prog='jauto-prof')
 
     conn = parser.add_mutually_exclusive_group()
@@ -259,6 +259,11 @@ def main():
         help='query profiler state (paused, shutting_down)'
     )
 
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
 
     if args.tcp is not None:
