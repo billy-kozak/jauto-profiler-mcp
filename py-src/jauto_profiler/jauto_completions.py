@@ -102,6 +102,26 @@ def _complete_instrumented_classes(prefix, socket_path):
     return [c for c in classes if c.startswith(prefix)]
 
 
+def _complete_methods(class_name, prefix, socket_path):
+    """Method-signature completion: all methods of a loaded class."""
+    methods = _query_profiler(socket_path, lambda c: c.get_class_methods(class_name))
+    if methods is None:
+        return []
+    return [m for m in methods if m.startswith(prefix)]
+
+
+def _complete_instrumented_methods(class_name, prefix, socket_path):
+    """Method-signature completion: only methods instrumented on this class."""
+    entries = _query_profiler(socket_path, ProfClient.get_instrumented_methods)
+    if entries is None:
+        return []
+    methods = {
+        e['method_sig'] for e in entries
+        if e.get('type') == 'method' and e.get('class_name') == class_name
+    }
+    return [m for m in methods if m.startswith(prefix)]
+
+
 ###############################################################################
 # argparse introspection helpers
 ###############################################################################
@@ -122,18 +142,17 @@ def _subparsers_action(parser):
     return None
 
 
-def _positional_context(sub_options, words_after):
-    """Classify what `cur` (the word following `words_after`) is completing.
+def _split_args(sub_options, words_after):
+    """Split already-typed subcommand words into positionals and a pending option.
 
-    Returns ('option', opt_string) if cur fills the value of an option that
-    was just typed, or ('positional', index) for the 0-based positional
-    index cur would fill.
+    Returns (positionals, pending): `positionals` is the list of positional
+    argument values typed so far, in order (so a completer needing e.g. the
+    class already typed for a method argument can look at positionals[0]).
+    `pending` is the option string whose value `cur` (the word following
+    `words_after`) will fill, or None if `cur` is itself a positional/option
+    name.
     """
-    pending = words_after[-1] if words_after else None
-    if pending in sub_options and sub_options[pending]:
-        return ('option', pending)
-
-    positionals = 0
+    positionals = []
     i = 0
     while i < len(words_after):
         tok = words_after[i]
@@ -143,9 +162,14 @@ def _positional_context(sub_options, words_after):
         if tok.startswith('-'):
             i += 1
             continue
-        positionals += 1
+        positionals.append(tok)
         i += 1
-    return ('positional', positionals)
+
+    pending = words_after[-1] if words_after else None
+    if not (pending in sub_options and sub_options[pending]):
+        pending = None
+
+    return positionals, pending
 
 
 ###############################################################################
@@ -158,34 +182,42 @@ def _positional_context(sub_options, words_after):
 ###############################################################################
 
 def _complete_instrument_method(subparser, words_after, cur, socket_path):
-    kind, value = _positional_context(_option_map(subparser), words_after)
-    if kind == 'positional' and value == 0:  # class
+    positionals, pending = _split_args(_option_map(subparser), words_after)
+    if pending is not None:
+        return []
+    if len(positionals) == 0:  # class
         return _complete_classes(cur, socket_path)
-    # value == 1 (method): method-name completion not implemented yet
+    if len(positionals) == 1:  # method
+        return _complete_methods(positionals[0], cur, socket_path)
     return []
 
 
 def _complete_instrument_line(subparser, words_after, cur, socket_path):
-    kind, value = _positional_context(_option_map(subparser), words_after)
-    if kind == 'option' and value == '--exit-class':
+    positionals, pending = _split_args(_option_map(subparser), words_after)
+    if pending == '--exit-class':
         return _complete_classes(cur, socket_path)
-    if kind == 'positional' and value == 0:  # entry-class
+    if pending is not None:
+        return []
+    if len(positionals) == 0:  # entry-class
         return _complete_classes(cur, socket_path)
     # entry-line (1), exit-line (2): no completion
     return []
 
 
 def _complete_deinstrument_method(subparser, words_after, cur, socket_path):
-    kind, value = _positional_context(_option_map(subparser), words_after)
-    if kind == 'positional' and value == 0:  # class
+    positionals, pending = _split_args(_option_map(subparser), words_after)
+    if pending is not None:
+        return []
+    if len(positionals) == 0:  # class
         return _complete_instrumented_classes(cur, socket_path)
-    # value == 1 (method): method-name completion not implemented yet
+    if len(positionals) == 1:  # method
+        return _complete_instrumented_methods(positionals[0], cur, socket_path)
     return []
 
 
 def _complete_dump_stats(subparser, words_after, cur, socket_path):
-    kind, value = _positional_context(_option_map(subparser), words_after)
-    if kind == 'positional' and value == 0:  # file
+    positionals, pending = _split_args(_option_map(subparser), words_after)
+    if pending is None and len(positionals) == 0:  # file
         return _compgen_f(cur)
     return []
 
