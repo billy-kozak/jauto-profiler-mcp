@@ -276,7 +276,7 @@ class ProfClient:
 
         return self._parse_stats(resp.raw_body)
 
-    def list_loaded_classes(self) -> list[str]:
+    def get_loaded_classes(self) -> list[str]:
         resp = self._send_request(
             _MSG_TYPE_REQUEST_LOADED_CLASSES,
         )
@@ -374,7 +374,7 @@ class ProfClient:
 
         return "paused" if status == _PAUSE_THREADS_STATUS_OK else "already_paused"
 
-    def list_instrumented_methods(self) -> list[dict]:
+    def get_instrumented_methods(self) -> list[dict]:
 
         resp = self._send_request(_MSG_TYPE_REQUEST_LIST_INSTRUMENTED)
 

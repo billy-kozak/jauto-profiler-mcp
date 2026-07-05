@@ -60,7 +60,7 @@ def get_loaded_classes(ctx: Context) -> list[str]:
 
     Example: "org/example/MyService$Handler"
     """
-    return _client(ctx).list_loaded_classes()
+    return _client(ctx).get_loaded_classes()
 
 
 @mcp.tool()
@@ -176,7 +176,7 @@ def get_instrumented_methods(ctx: Context) -> list[dict]:
     a deferred instrumentation has been promoted to active after its class
     loaded.
     """
-    return _client(ctx).list_instrumented_methods()
+    return _client(ctx).get_instrumented_methods()
 
 
 @mcp.tool()

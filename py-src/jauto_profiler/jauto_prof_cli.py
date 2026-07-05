@@ -38,8 +38,8 @@ class ClientCmd(object):
     def __call__(self, *args):
         return self.handler(self.client, *args)
 
-def cmd_list_classes(client, args):
-    for cls in client.list_loaded_classes():
+def cmd_get_classes(client, args):
+    for cls in client.get_loaded_classes():
         print(cls)
 
 
@@ -99,8 +99,8 @@ def cmd_pause_threads(client, args):
     print(client.pause_threads())
 
 
-def cmd_list_instrumented(client, args):
-    for entry in client.list_instrumented_methods():
+def cmd_get_instrumented(client, args):
+    for entry in client.get_instrumented_methods():
         if entry.get('type') == 'line':
             print(
                 f"{entry['status']}\t{entry['instrument_id']}"
@@ -168,7 +168,7 @@ def main():
 
     sub = parser.add_subparsers(dest='command', required=True)
 
-    sub.add_parser('list-classes', help='list classes loaded in the JVM')
+    sub.add_parser('get-classes', help='list classes loaded in the JVM')
 
     p = sub.add_parser('get-methods', help='list methods of a loaded class')
     p.add_argument('class_name', metavar='class')
@@ -229,7 +229,7 @@ def main():
     sub.add_parser('pause-threads', help='suspend all application threads')
 
     sub.add_parser(
-        'list-instrumented',
+        'get-instrumented',
         help='list all instrumented and deferred methods'
     )
 
@@ -253,7 +253,7 @@ def main():
     client = ProfClient(socket_path)
 
     commands = {
-        'list-classes':       ClientCmd(client, cmd_list_classes),
+        'get-classes':        ClientCmd(client, cmd_get_classes),
         'get-methods':        ClientCmd(client, cmd_get_methods),
         'instrument-method':  ClientCmd(client, cmd_instrument_method),
         'instrument-line':    ClientCmd(client, cmd_instrument_line),
@@ -264,7 +264,7 @@ def main():
         'shutdown':           ClientCmd(client, cmd_shutdown),
         'resume':             ClientCmd(client, cmd_resume),
         'pause-threads':      ClientCmd(client, cmd_pause_threads),
-        'list-instrumented':  ClientCmd(client, cmd_list_instrumented),
+        'get-instrumented':   ClientCmd(client, cmd_get_instrumented),
         'get-async-errors':   ClientCmd(client, cmd_get_async_errors),
         'get-status':         ClientCmd(client, cmd_get_status),
     }
