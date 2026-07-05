@@ -60,6 +60,7 @@ OBJ_DIR := build/c/obj
 CD_DIR := build/c/deps
 JAVA_BUILD_DIR := build/java
 DEP_DIR := build/deps/
+PY_BUILD_DIR := build/python
 
 ASM_VERSION := 9.10.1
 ASM_JAR := $(BUILD_DIR)/deps/asm-$(ASM_VERSION).jar
@@ -101,7 +102,8 @@ JAVA_FILES = $(shell find $(JSRC_ROOT) -name "*.java")
 CLASS_FILES = $(JAVA_FILES:$(JSRC_ROOT)/%.java=$(JAVA_BUILD_DIR)/%.class)
 
 PYSRC_FILES = $(shell find $(PYSRC_ROOT) -name "*.py")
-PYSRC_FILES += $(PYSRC_ROOT)/pyproject.toml
+
+GEN_PYPROJECT := $(PY_BUILD_DIR)/pyproject.toml
 
 SETUP_DIST = build-src/setup
 MCP_DIST = $(BUILDSRC_ROOT)/entry-points/jauto-prof-mcp
@@ -115,6 +117,7 @@ INC = $(JAVA_INC) -I$(CSRC_MAIN)
 
 CLEAN_FILES += $(OBJ_DIR) $(CD_DIR) $(JAVA_BUILD_DIR) $(DIST_DIR) $(DEP_DIR)
 CLEAN_FILES += $(wildcard $(OUTPUT_DIR)/*)
+CLEAN_FILES += $(PY_BUILD_DIR)
 ###############################################################################
 #                                   MACROS                                    #
 ###############################################################################
@@ -181,6 +184,10 @@ java: $(JAR_FILE)
 .project:
 	build-src/gen-eclipse-project jauto-profiler $@
 
+$(GEN_PYPROJECT): $(VERSION_FILE) build-src/gen-pyproject
+	@mkdir -p $(dir $@)
+	build-src/gen-pyproject $(VERSION) $@
+
 $(ASM_JAR):
 	JAVA_HOME=$(JAVA_HOME) build-src/download-asm
 
@@ -197,7 +204,7 @@ $(CLASS_FILES): $(JAVA_BUILD_DIR)/%.class: $(JSRC_ROOT)/%.java | $(ASM_JAR)
 		-d $(JAVA_BUILD_DIR) -sourcepath $(JSRC_ROOT) $<
 
 $(OUT_DIST): COPYING COPYING.LESSER $(MCP_DIST)
-$(OUT_DIST): $(BIN_FILES) $(PYSRC_FILES) $(SETUP_DIST)
+$(OUT_DIST): $(BIN_FILES) $(PYSRC_FILES) $(SETUP_DIST) $(GEN_PYPROJECT)
 $(OUT_DIST): $(SKILL_DOC) $(DIST_README) $(VERSION_FILE)
 	rm -rf $(DIST_ROOT)
 	mkdir -p $(DIST_ROOT)
@@ -206,6 +213,7 @@ $(OUT_DIST): $(SKILL_DOC) $(DIST_README) $(VERSION_FILE)
 	$(call prefix_inst,./,COPYING COPYING.LESSER,$(DIST_ROOT))
 	$(call prefix_inst,./,$(SKILL_DOC),$(DIST_ROOT))
 	$(call prefix_inst,./,$(VERSION_FILE),$(DIST_ROOT))
+	install -D $(GEN_PYPROJECT) $(DIST_ROOT)/$(PYSRC_ROOT)/pyproject.toml
 	install -D $(MCP_DIST) $(DIST_ROOT)/bin
 	install $(SETUP_DIST) $(DIST_ROOT)
 	install $(DIST_README) $(DIST_ROOT)/README.md
