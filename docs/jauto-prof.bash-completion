@@ -1,0 +1,101 @@
+#!/bin/bash
+###############################################################################
+# Copyright (C) 2026  Billy Kozak                                             #
+#                                                                             #
+# This file is part of the jauto-profiler program                             #
+#                                                                             #
+# This program is free software: you can redistribute it and/or modify        #
+# it under the terms of the GNU Lesser General Public License as published by #
+# the Free Software Foundation, either version 3 of the License, or           #
+# (at your option) any later version.                                         #
+#                                                                             #
+# This program is distributed in the hope that it will be useful,             #
+# but WITHOUT ANY WARRANTY; without even the implied warranty of              #
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the               #
+# GNU Lesser General Public License for more details.                         #
+#                                                                             #
+# You should have received a copy of the GNU Lesser General Public License    #
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.       #
+###############################################################################
+# Bash tab completion for the jauto-prof CLI.
+#
+# Source this file (e.g. from ~/.bashrc) and make sure `jauto-prof` is on
+# $PATH. If you invoke it via a path instead (e.g. ./scripts/jauto-prof or
+# bin/jauto-prof), register that literal invocation too:
+#
+#   complete -F _jauto_prof_completions /path/to/jauto-prof
+###############################################################################
+
+_jauto_prof_completions()
+{
+	local cur prev subcommand i
+
+	local commands=(
+		get-classes
+		get-methods
+		instrument-method
+		instrument-line
+		deinstrument-method
+		deinstrument-by-id
+		shutdown
+		dump-stats
+		stat-summary
+		resume
+		pause-threads
+		get-instrumented
+		get-async-errors
+		get-status
+	)
+	local global_opts=(--socket --tcp -h --help)
+
+	COMPREPLY=()
+	cur="${COMP_WORDS[COMP_CWORD]}"
+	prev="${COMP_WORDS[COMP_CWORD - 1]}"
+
+	# Find the first word that is a subcommand, skipping global options and
+	# their values.
+	subcommand=
+	i=1
+	while [ "${i}" -lt "${COMP_CWORD}" ]; do
+		case "${COMP_WORDS[i]}" in
+		--socket|--tcp)
+			i=$((i + 2))
+			continue
+			;;
+		-h|--help)
+			i=$((i + 1))
+			continue
+			;;
+		-*)
+			i=$((i + 1))
+			continue
+			;;
+		*)
+			subcommand="${COMP_WORDS[i]}"
+			break
+			;;
+		esac
+	done
+
+	if [ -z "${subcommand}" ]; then
+		case "${prev}" in
+		--socket)
+			COMPREPLY=($(compgen -f -- "${cur}"))
+			return
+			;;
+		--tcp)
+			return
+			;;
+		esac
+		COMPREPLY=($(compgen -W "${commands[*]} ${global_opts[*]}" -- "${cur}"))
+		return
+	fi
+
+	case "${subcommand}" in
+	dump-stats)
+		COMPREPLY=($(compgen -f -- "${cur}"))
+		;;
+	esac
+}
+
+complete -F _jauto_prof_completions jauto-prof

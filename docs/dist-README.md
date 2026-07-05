@@ -12,6 +12,7 @@ server and associated tools for JVM profiling automation.
 | `bin/jauto-prof-mcp` | MCP server entry point — register this with your agent harness |
 | `py-src/` | Python source for the MCP server and CLI |
 | `docs/SKILL.md` | Agent skill guide — install this in your agent harness (see below) |
+| `docs/jauto-prof.bash-completion` | Bash tab completion for the CLI (see below) |
 | `setup` | Installation script — run this first |
 | `COPYING` | GNU Lesser General Public License v3 |
 | `COPYING.LESSER` | GNU Lesser General Public License v3 (additional terms) |
@@ -36,3 +37,18 @@ To make the skill guide available to your agent, consult the documentation of yo
 specific harness.
 
 In claude code, for instance, place the file at `.claude/skills/jauto-prof/SKILL.md`.
+
+## Installing Tab Completion
+
+`docs/jauto-prof.bash-completion` adds bash tab completion for the `jauto-prof`
+CLI (subcommand names and file path arguments).
+
+Source it from your shell's startup file, e.g.:
+```
+echo 'source /path/to/docs/jauto-prof.bash-completion' >> ~/.bashrc
+```
+
+This registers completion for the bare `jauto-prof` command, so it assumes
+`bin/jauto-prof` is on your `$PATH`. If you invoke it via a path instead,
+register that literal invocation too — see the comment at the top of the
+file.

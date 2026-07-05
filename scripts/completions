@@ -1,0 +1,34 @@
+#!/bin/bash
+###############################################################################
+# Copyright (C) 2026  Billy Kozak                                             #
+#                                                                             #
+# This file is part of the jauto-profiler program                             #
+#                                                                             #
+# This program is free software: you can redistribute it and/or modify        #
+# it under the terms of the GNU Lesser General Public License as published by #
+# the Free Software Foundation, either version 3 of the License, or           #
+# (at your option) any later version.                                         #
+#                                                                             #
+# This program is distributed in the hope that it will be useful,             #
+# but WITHOUT ANY WARRANTY; without even the implied warranty of              #
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the               #
+# GNU Lesser General Public License for more details.                         #
+#                                                                             #
+# You should have received a copy of the GNU Lesser General Public License    #
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.       #
+###############################################################################
+#set -e
+SCRIPT_HOME="$(dirname "$(readlink -f "${BASH_SOURCE}")")"
+ROOT="$(dirname "${SCRIPT_HOME}")"
+
+PATH_TO_SCRIPTS="$(dirname "${BASH_SOURCE}")"
+
+(return 0 2>/dev/null) && SOURCED=1 || SOURCED=0
+
+if [ "${SOURCED}" -eq 0 ]; then
+	echo "Source this script (source ${BASH_SOURCE}) to setup bash " >&2
+	echo "tab completion." >&2
+fi
+
+source "${ROOT}/docs/jauto-prof.bash-completion"
+complete -F _jauto_prof_completions "${PATH_TO_SCRIPTS}/jauto-prof"
