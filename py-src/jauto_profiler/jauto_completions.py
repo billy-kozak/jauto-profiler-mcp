@@ -65,8 +65,12 @@ def _compgen_f(prefix):
     return proc.stdout.splitlines()
 
 
-def _complete_classes(prefix, socket_path):
-    """Class-name completion, queried live from a running profiler."""
+def _query_profiler(socket_path, fetch):
+    """Run `fetch(client)` against a live profiler, swallowing failures.
+
+    Returns `fetch`'s result, or None if the profiler couldn't be reached or
+    didn't respond within the short query timeout.
+    """
     try:
         client = ProfClient(
             socket_path,
@@ -74,11 +78,27 @@ def _complete_classes(prefix, socket_path):
             resp_timeout=_CLASS_QUERY_RESP_TIMEOUT,
         )
         try:
-            classes = client.get_loaded_classes()
+            return fetch(client)
         finally:
             client.close()
     except (RuntimeError, ConnectionError, ValueError, OSError):
+        return None
+
+
+def _complete_classes(prefix, socket_path):
+    """Class-name completion: all classes loaded in the JVM."""
+    classes = _query_profiler(socket_path, ProfClient.get_loaded_classes)
+    if classes is None:
         return []
+    return [c for c in classes if c.startswith(prefix)]
+
+
+def _complete_instrumented_classes(prefix, socket_path):
+    """Class-name completion: only classes with an instrumented method."""
+    entries = _query_profiler(socket_path, ProfClient.get_instrumented_methods)
+    if entries is None:
+        return []
+    classes = {e['class_name'] for e in entries if e.get('type') == 'method'}
     return [c for c in classes if c.startswith(prefix)]
 
 
@@ -158,7 +178,7 @@ def _complete_instrument_line(subparser, words_after, cur, socket_path):
 def _complete_deinstrument_method(subparser, words_after, cur, socket_path):
     kind, value = _positional_context(_option_map(subparser), words_after)
     if kind == 'positional' and value == 0:  # class
-        return _complete_classes(cur, socket_path)
+        return _complete_instrumented_classes(cur, socket_path)
     # value == 1 (method): method-name completion not implemented yet
     return []
 
