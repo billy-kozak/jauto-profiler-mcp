@@ -228,7 +228,9 @@ def dump_stats(ctx: Context, output_file: str) -> str:
     Skip the first 2-3 snapshots after instrumentation — the JIT recompiles
     during that window and the numbers will be noisy.
 
-    Up to 3600 snapshots (one hour) of history are retained per method.
+    Up to 3600 snapshots (one hour) of history are retained per method by
+    default. Set the JAUTO_PROF_NSLOTS environment variable on the profiled
+    JVM to change the number of snapshots retained.
 
     WARNING FOR AGENTS: Do NOT attempt to read or interpret the raw JSON dump
     by eye. The snapshot data is large, cumulative, and requires arithmetic

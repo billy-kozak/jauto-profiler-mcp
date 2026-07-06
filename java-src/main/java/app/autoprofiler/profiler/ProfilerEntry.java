@@ -18,13 +18,20 @@
 
 package app.autoprofiler.profiler;
 
+import app.autoprofiler.util.Logger;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 public class ProfilerEntry {
 
-    public static final int RING_BUFFER_SIZE = 3600;
+    private static final Logger LOGGER = Logger.init("profiler-entry");
+
+    private static final String NSLOTS_ENV     = "JAUTO_PROF_NSLOTS";
+    private static final int    DEFAULT_NSLOTS = 3600;
+
+    public static final int RING_BUFFER_SIZE = resolveNSlots();
 
     public final Profiler profiler;
     private final ProfilerSnapshot[] buffer = new ProfilerSnapshot[RING_BUFFER_SIZE];
@@ -52,5 +59,29 @@ public class ProfilerEntry {
         }
         Collections.sort(result);
         return result.toArray(new ProfilerSnapshot[0]);
+    }
+
+    private static int resolveNSlots() {
+        String env = System.getenv(NSLOTS_ENV);
+        if (env == null || env.isEmpty()) {
+            return DEFAULT_NSLOTS;
+        }
+        try {
+            int n = Integer.parseInt(env);
+            if (n <= 0) {
+                LOGGER.warn(
+                    NSLOTS_ENV + " must be a positive integer, got '" + env
+                        + "'. Defaulting to " + DEFAULT_NSLOTS + "."
+                );
+                return DEFAULT_NSLOTS;
+            }
+            return n;
+        } catch (NumberFormatException e) {
+            LOGGER.warn(
+                NSLOTS_ENV + " must be a positive integer, got '" + env
+                    + "'. Defaulting to " + DEFAULT_NSLOTS + "."
+            );
+            return DEFAULT_NSLOTS;
+        }
     }
 }
