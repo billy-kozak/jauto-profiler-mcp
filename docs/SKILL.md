@@ -72,6 +72,8 @@ The target JVM must have been launched with two extra flags:
 - `JAUTO_PROF_PAUSE_ON_START`: set to zero to disable the automatic pause on start behaviour.
 - `JAUTO_PROF_PAUSE_ON_EXIT`: set to zero to disable the automatic pause on exit behaviour. By default, the JVM will
   pause on exit until the profiler client sends a `shutdown` command, allowing final statistics to be collected.
+- `JAUTO_PROF_NSLOTS`: sets the number of snapshots retained per probe (default 3600).
+- `JAUTO_PROF_TICK_MS`: sets the number of milliseconds between snapshots (default 1000).
 
 ---
 

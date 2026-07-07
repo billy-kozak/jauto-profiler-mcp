@@ -33,6 +33,12 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class ProfilerRegistry {
 
     private static final Logger LOGGER = Logger.init("profiler-registry");
+
+    private static final String TICK_MS_ENV     = "JAUTO_PROF_TICK_MS";
+    private static final int    DEFAULT_TICK_MS = 1000;
+
+    public static final int TICK_MS = resolveTickMs();
+
     private static final ProfilerRegistry INSTANCE = new ProfilerRegistry();
 
     private final CopyOnWriteArrayList<ProfilerEntry> entries = new CopyOnWriteArrayList<>();
@@ -92,7 +98,7 @@ public class ProfilerRegistry {
         byte[][] nameBytes = new byte[n][];
         ProfilerSnapshot[][] snapshots = new ProfilerSnapshot[n][];
 
-        int totalSize = Integer.BYTES;
+        int totalSize = Integer.BYTES + Integer.BYTES;   // n + msPerSlice
         for (int i = 0; i < n; i++) {
             nameBytes[i] = snapshot.get(i).profiler.name.getBytes(StandardCharsets.UTF_8);
             snapshots[i] = snapshot.get(i).getOrderedSnapshots();
@@ -103,6 +109,7 @@ public class ProfilerRegistry {
 
         ByteBuffer buf = ByteBuffer.allocate(totalSize).order(ByteOrder.LITTLE_ENDIAN);
         buf.putInt(n);
+        buf.putInt(TICK_MS);
         for (int i = 0; i < n; i++) {
             buf.putLong(snapshot.get(i).profiler.instrumentId);
             buf.putShort((short) nameBytes[i].length);
@@ -148,17 +155,41 @@ public class ProfilerRegistry {
     private void collect() {
         while (!Thread.currentThread().isInterrupted()) {
             try {
-                Thread.sleep(1000);
+                Thread.sleep(TICK_MS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
             }
-            long timestamp = System.currentTimeMillis() / 1000;
+            long timestamp = System.currentTimeMillis();
             for (ProfilerEntry entry : entries) {
                 if (entry.profiler.active) {
                     entry.record(timestamp);
                 }
             }
+        }
+    }
+
+    private static int resolveTickMs() {
+        String env = System.getenv(TICK_MS_ENV);
+        if (env == null || env.isEmpty()) {
+            return DEFAULT_TICK_MS;
+        }
+        try {
+            int n = Integer.parseInt(env);
+            if (n <= 0) {
+                LOGGER.warn(
+                    TICK_MS_ENV + " must be a positive integer, got '" + env
+                        + "'. Defaulting to " + DEFAULT_TICK_MS + "."
+                );
+                return DEFAULT_TICK_MS;
+            }
+            return n;
+        } catch (NumberFormatException e) {
+            LOGGER.warn(
+                TICK_MS_ENV + " must be a positive integer, got '" + env
+                    + "'. Defaulting to " + DEFAULT_TICK_MS + "."
+            );
+            return DEFAULT_TICK_MS;
         }
     }
 }

@@ -244,12 +244,12 @@ class ProfClient:
             self._sock.sendall(hdr + body)
             return self._recv_msg()
 
-    def _parse_stats(self, body: bytes) -> list[dict]:
-        if len(body) < 4:
+    def _parse_stats(self, body: bytes) -> dict:
+        if len(body) < 8:
             raise ValueError("stats response too short")
 
-        (count,) = struct.unpack_from("<I", body, 0)
-        offset = 4
+        count, ms_per_slice = struct.unpack_from("<II", body, 0)
+        offset = 8
         result = []
 
         _INSTR_ID_FMT  = "<Q"
@@ -286,9 +286,9 @@ class ProfClient:
                 "snapshots": snapshots,
             })
 
-        return result
+        return {"ms_per_slice": ms_per_slice, "probes": result}
 
-    def get_stats(self) -> list[dict]:
+    def get_stats(self) -> dict:
 
         resp = self._send_request(
             _MSG_TYPE_REQUEST_GET_STATS,
@@ -580,7 +580,7 @@ class ProfClient:
 
 
 def compute_stat_summary(
-    stats: list[dict],
+    stats: dict,
     name: str,
     start_time: float,
     end_time: float,
@@ -589,12 +589,15 @@ def compute_stat_summary(
 
     stats: output of ProfClient.get_stats()
     name: profiler name as returned in the stats entry
+    start_time, end_time: Unix timestamp in seconds
     Snapshots are cumulative; the function diffs the first and last snapshot
-    that fall within [start_time, end_time].
+    that fall within [start_time, end_time]. Snapshot timestamps are stored
+    in epoch milliseconds, so the window bounds are converted to milliseconds
+    before filtering.
     """
     entry = None
 
-    for e in stats:
+    for e in stats["probes"]:
         if e["name"] == name:
             entry = e
             break
@@ -602,9 +605,12 @@ def compute_stat_summary(
     if entry is None:
         raise ValueError(f"profiler not found in stats: {name}")
 
+    start_ms = start_time * 1000.0
+    end_ms   = end_time * 1000.0
+
     snaps = [
         s for s in entry["snapshots"]
-        if start_time <= s["timestamp"] <= end_time
+        if start_ms <= s["timestamp"] <= end_ms
     ]
 
     if len(snaps) < 2:

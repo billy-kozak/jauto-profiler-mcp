@@ -212,25 +212,31 @@ def deinstrument_method(ctx: Context, class_name: str, method_sig: str) -> None:
 def dump_stats(ctx: Context, output_file: str) -> str:
     """Write profiling statistics for all active probes to a JSON file.
 
-    Each entry in the JSON contains:
-      instrument_id - the unique ID assigned by the profiler
-      name          - human-readable probe name (methods: "className:methodSig")
-      snapshots     - list of per-second snapshots in chronological order,
-                    each with timestamp (Unix seconds), call_count
-                    (cumulative), and total_nanos (cumulative nanoseconds).
+    The JSON written contains:
+      ms_per_slice - milliseconds between consecutive snapshots (the
+                    collector's tick interval; see JAUTO_PROF_TICK_MS below)
+      probes       - list of entries, each containing:
+        instrument_id - the unique ID assigned by the profiler
+        name          - human-readable probe name (methods: "className:methodSig")
+        snapshots     - list of periodic snapshots in chronological order,
+                        each with timestamp (Unix epoch milliseconds),
+                        call_count (cumulative), and total_nanos (cumulative
+                        nanoseconds).
 
     Snapshots are CUMULATIVE — diff consecutive pairs to get rates:
       calls/sec  = (snap_b.call_count  - snap_a.call_count)
-                   / (snap_b.timestamp - snap_a.timestamp)
+                   / ((snap_b.timestamp - snap_a.timestamp) / 1000.0)
       ns/call    = (snap_b.total_nanos - snap_a.total_nanos)
                    / (snap_b.call_count - snap_a.call_count)
 
     Skip the first 2-3 snapshots after instrumentation — the JIT recompiles
     during that window and the numbers will be noisy.
 
-    Up to 3600 snapshots (one hour) of history are retained per method by
-    default. Set the JAUTO_PROF_NSLOTS environment variable on the profiled
-    JVM to change the number of snapshots retained.
+    Up to JAUTO_PROF_NSLOTS snapshots (default 3600) of history are retained
+    per method, spaced ms_per_slice milliseconds apart (default 1000, i.e.
+    one hour of history by default). Set the JAUTO_PROF_NSLOTS and
+    JAUTO_PROF_TICK_MS environment variables on the profiled JVM to change
+    the retention count and slice width respectively.
 
     WARNING FOR AGENTS: Do NOT attempt to read or interpret the raw JSON dump
     by eye. The snapshot data is large, cumulative, and requires arithmetic
@@ -275,7 +281,7 @@ def stat_summary(
       avg_ns_per_call - average wall-clock nanoseconds per invocation
 
     At least two snapshots must fall within the requested window.
-    Skip the first 2-3 seconds after instrumentation — JIT recompilation
+    Skip the first 2-3 snapshots after instrumentation — JIT recompilation
     makes those samples noisy.
     """
     start = resolve_time_arg(start_time)

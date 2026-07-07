@@ -127,7 +127,7 @@ def _complete_stat_names(prefix, socket_path):
     stats = _query_profiler(socket_path, ProfClient.get_stats)
     if stats is None:
         return []
-    names = {s['name'] for s in stats}
+    names = {s['name'] for s in stats['probes']}
     return [n for n in names if n.startswith(prefix)]
 
 
