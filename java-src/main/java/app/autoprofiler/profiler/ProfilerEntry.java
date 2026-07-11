@@ -48,6 +48,19 @@ public class ProfilerEntry {
         head = (head + 1) % RING_BUFFER_SIZE;
     }
 
+    /* Repeats the previous cumulative counts under a new timestamp, i.e. a
+     * snapshot with a zero delta. Used to backfill a tick the collector
+     * couldn't sample on time, so a stall shows up in the data as an
+     * explicit flatline instead of being silently folded into a wider
+     * real interval. */
+    public synchronized void recordZero(long timestamp) {
+        ProfilerSnapshot last = buffer[(head - 1 + RING_BUFFER_SIZE) % RING_BUFFER_SIZE];
+        long callCount  = (last != null) ? last.callCount  : 0;
+        long totalNanos = (last != null) ? last.totalNanos : 0;
+        buffer[head] = new ProfilerSnapshot(timestamp, callCount, totalNanos);
+        head = (head + 1) % RING_BUFFER_SIZE;
+    }
+
     public ProfilerSnapshot[] getOrderedSnapshots() {
         List<ProfilerSnapshot> result = new ArrayList<>(RING_BUFFER_SIZE);
         synchronized (this) {

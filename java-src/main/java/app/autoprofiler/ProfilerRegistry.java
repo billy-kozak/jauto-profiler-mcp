@@ -153,18 +153,41 @@ public class ProfilerRegistry {
     }
 
     private void collect() {
+        long nextTick = System.currentTimeMillis() + TICK_MS;
+
         while (!Thread.currentThread().isInterrupted()) {
-            try {
-                Thread.sleep(TICK_MS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
+            long sleepMs = nextTick - System.currentTimeMillis();
+
+            if (sleepMs > 0) {
+                try {
+                    Thread.sleep(sleepMs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
             }
-            long timestamp = System.currentTimeMillis();
+
             for (ProfilerEntry entry : entries) {
                 if (entry.profiler.active) {
-                    entry.record(timestamp);
+                    entry.record(nextTick);
                 }
+            }
+
+            nextTick += TICK_MS;
+
+            if (nextTick <= System.currentTimeMillis()) {
+                LOGGER.debug(
+                    "collector missed one or more ticks starting at " + nextTick
+                        + "; backfilling with zero-delta snapshots until caught up"
+                );
+                do {
+                    for (ProfilerEntry entry : entries) {
+                        if (entry.profiler.active) {
+                            entry.recordZero(nextTick);
+                        }
+                    }
+                    nextTick += TICK_MS;
+                } while (nextTick <= System.currentTimeMillis());
             }
         }
     }
