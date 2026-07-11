@@ -130,6 +130,10 @@ If `stat_summary` does not give you what you need, write a short Python or
 shell script that reads the dumped JSON file and computes the values
 programmatically. Do not attempt the arithmetic in your head.
 
+With that said, modern multi-modal models _are_ reasonably good at 'eye-balling' graphs, and so generating and reading
+profiler stats graph files is reasonable for simple use-cases, but for anything sophisticated write code to analyze
+stats.
+
 ---
 
 ## Interpreting the stats
