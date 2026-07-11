@@ -1,0 +1,81 @@
+#!/bin/bash
+###############################################################################
+# Copyright (C) 2026  Billy Kozak                                             #
+#                                                                             #
+# This file is part of the jauto-profiler program                             #
+#                                                                             #
+# This program is free software: you can redistribute it and/or modify        #
+# it under the terms of the GNU Lesser General Public License as published by #
+# the Free Software Foundation, either version 3 of the License, or           #
+# (at your option) any later version.                                         #
+#                                                                             #
+# This program is distributed in the hope that it will be useful,             #
+# but WITHOUT ANY WARRANTY; without even the implied warranty of              #
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the               #
+# GNU Lesser General Public License for more details.                         #
+#                                                                             #
+# You should have received a copy of the GNU Lesser General Public License    #
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.       #
+###############################################################################
+# Generates the "install" script shipped in the release tarball. The default
+# install prefix is baked in as $1 (see the PREFIX variable in the Makefile);
+# the generated script still allows that default to be overridden at install
+# time via a PREFIX environment variable, per usual Unix convention.
+set -e
+
+DEFAULT_PREFIX="$1"
+OUTPUT="$2"
+
+cat > "$OUTPUT" <<'EOF'
+#!/bin/bash
+###############################################################################
+# Copyright (C) 2026  Billy Kozak                                             #
+#                                                                             #
+# This file is part of the jauto-profiler program                             #
+#                                                                             #
+# This program is free software: you can redistribute it and/or modify        #
+# it under the terms of the GNU Lesser General Public License as published by #
+# the Free Software Foundation, either version 3 of the License, or           #
+# (at your option) any later version.                                         #
+#                                                                             #
+# This program is distributed in the hope that it will be useful,             #
+# but WITHOUT ANY WARRANTY; without even the implied warranty of              #
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the               #
+# GNU Lesser General Public License for more details.                         #
+#                                                                             #
+# You should have received a copy of the GNU Lesser General Public License    #
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.       #
+###############################################################################
+set -e
+
+EOF
+
+echo "DEFAULT_PREFIX=\"${DEFAULT_PREFIX}\"" >> "$OUTPUT"
+
+cat >> "$OUTPUT" <<'EOF'
+PREFIX="${PREFIX:-$DEFAULT_PREFIX}"
+
+SCRIPT_HOME="$(dirname "$(readlink -f "$0")")"
+
+echo "Installing jauto-prof to ${PREFIX}..."
+
+mkdir -p "${PREFIX}"
+
+for item in bin py-src docs setup COPYING COPYING.LESSER README.md; do
+	if [ -e "${SCRIPT_HOME}/${item}" ]; then
+		cp -a "${SCRIPT_HOME}/${item}" "${PREFIX}/"
+	fi
+done
+
+"${PREFIX}/setup"
+
+echo ""
+echo "Install complete: ${PREFIX}"
+echo ""
+echo "Add the following to your ~/.bashrc to put jauto-prof on your PATH"
+echo "and enable tab completion:"
+echo ""
+echo "    export PATH=\"${PREFIX}/bin:\$PATH\""
+echo "    source \"${PREFIX}/docs/jauto-prof.bash-completion\""
+echo ""
+EOF

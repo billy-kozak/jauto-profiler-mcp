@@ -75,6 +75,8 @@ DIST_ROOT := $(DIST_DIR)/$(DIST_NAME)
 VERSION_FILE := docs/version.txt
 VERSION := $(shell cat $(VERSION_FILE))
 
+PREFIX ?= /opt/jauto-prof-mcp
+
 CSRC_ROOT = c-src
 CSRC_DIRS = $(shell find $(CSRC_ROOT) -type d)
 
@@ -104,6 +106,7 @@ CLASS_FILES = $(JAVA_FILES:$(JSRC_ROOT)/%.java=$(JAVA_BUILD_DIR)/%.class)
 PYSRC_FILES = $(shell find $(PYSRC_ROOT) -name "*.py")
 
 GEN_PYPROJECT := $(PY_BUILD_DIR)/pyproject.toml
+GEN_INSTALL := $(BUILD_DIR)/install
 
 SETUP_DIST = build-src/setup
 MCP_DIST = $(BUILDSRC_ROOT)/entry-points/jauto-prof-mcp
@@ -120,6 +123,7 @@ INC = $(JAVA_INC) -I$(CSRC_MAIN)
 CLEAN_FILES += $(OBJ_DIR) $(CD_DIR) $(JAVA_BUILD_DIR) $(DIST_DIR) $(DEP_DIR)
 CLEAN_FILES += $(wildcard $(OUTPUT_DIR)/*)
 CLEAN_FILES += $(PY_BUILD_DIR)
+CLEAN_FILES += $(GEN_INSTALL)
 ###############################################################################
 #                                   MACROS                                    #
 ###############################################################################
@@ -190,6 +194,10 @@ $(GEN_PYPROJECT): $(VERSION_FILE) build-src/gen-pyproject
 	@mkdir -p $(dir $@)
 	build-src/gen-pyproject $(VERSION) $@
 
+$(GEN_INSTALL): build-src/gen-install
+	@mkdir -p $(dir $@)
+	build-src/gen-install $(PREFIX) $@
+
 $(ASM_JAR):
 	JAVA_HOME=$(JAVA_HOME) build-src/download-asm
 
@@ -206,7 +214,7 @@ $(CLASS_FILES): $(JAVA_BUILD_DIR)/%.class: $(JSRC_ROOT)/%.java | $(ASM_JAR)
 		-d $(JAVA_BUILD_DIR) -sourcepath $(JSRC_ROOT) $<
 
 $(OUT_DIST): COPYING COPYING.LESSER $(MCP_DIST) $(COMPLETIONS_DIST)
-$(OUT_DIST): $(BIN_FILES) $(PYSRC_FILES) $(SETUP_DIST) $(GEN_PYPROJECT)
+$(OUT_DIST): $(BIN_FILES) $(PYSRC_FILES) $(SETUP_DIST) $(GEN_PYPROJECT) $(GEN_INSTALL)
 $(OUT_DIST): $(SKILL_DOC) $(COMPLETION_DOC) $(DIST_README) $(VERSION_FILE)
 	rm -rf $(DIST_ROOT)
 	mkdir -p $(DIST_ROOT)
@@ -220,6 +228,7 @@ $(OUT_DIST): $(SKILL_DOC) $(COMPLETION_DOC) $(DIST_README) $(VERSION_FILE)
 	install -D $(MCP_DIST) $(DIST_ROOT)/bin
 	install -m 0644 -D $(COMPLETIONS_DIST) $(DIST_ROOT)/bin
 	install $(SETUP_DIST) $(DIST_ROOT)
+	install $(GEN_INSTALL) $(DIST_ROOT)
 	install $(DIST_README) $(DIST_ROOT)/README.md
 	tar cvzf $(@) -C $(DIST_DIR) $(DIST_NAME)
 

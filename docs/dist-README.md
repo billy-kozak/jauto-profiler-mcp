@@ -14,19 +14,35 @@ server and associated tools for JVM profiling automation.
 | `py-src/` | Python source for the MCP server and CLI |
 | `docs/SKILL.md` | Agent skill guide — install this in your agent harness (see below) |
 | `docs/jauto-prof.bash-completion` | Bash tab completion for the CLI (see below) |
-| `setup` | Installation script — run this first |
+| `install` | System install script — copies this distribution into `$PREFIX` and runs `setup` there |
+| `setup` | Creates the Python virtual environment in place; run directly for an in-place (non-copying) setup |
 | `COPYING` | GNU Lesser General Public License v3 |
 | `COPYING.LESSER` | GNU Lesser General Public License v3 (additional terms) |
 
 ## Installation
 
+To install system-wide (recommended):
+
 1. Extract this archive.
-2. Run the `setup` script from the extracted directory:
+2. Run the `install` script:
    ```
-   ./setup
+   ./install
    ```
-   This creates a Python virtual environment and installs the CLI
-   (`jauto-prof`) and MCP server (`jauto-prof-mcp`) into `bin/`.
+   This copies the distribution into `/opt/jauto-prof-mcp` by default,
+   creates a Python virtual environment there, and installs the CLI
+   (`jauto-prof`) and MCP server (`jauto-prof-mcp`) into its `bin/`.
+
+   To install elsewhere, set `PREFIX`:
+   ```
+   PREFIX=/usr/local/jauto-prof-mcp ./install
+   ```
+
+   On success, `install` prints the lines to add to your `~/.bashrc` to put
+   `jauto-prof` on your `$PATH` and enable tab completion.
+
+To use the tool directly from the extracted directory instead of installing
+it elsewhere, run `./setup` instead — this only creates the virtual
+environment in place, without copying anything.
 
 ## Installing the Skill Guide
 
