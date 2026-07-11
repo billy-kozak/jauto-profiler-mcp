@@ -24,6 +24,7 @@ from contextlib import asynccontextmanager
 from mcp.server.fastmcp import FastMCP, Context
 
 from .prof_client import ProfClient, compute_stat_summary
+from .prof_graph import generate_stats_graph
 from .time_util import resolve_time_arg
 
 ###############################################################################
@@ -288,6 +289,58 @@ def stat_summary(
     end   = resolve_time_arg(end_time)
     stats = _client(ctx).get_stats()
     return compute_stat_summary(stats, name, start, end)
+
+
+@mcp.tool()
+def graph_stats(
+    ctx: Context,
+    output_path: str,
+    input_file: str | None = None,
+    names: list[str] | None = None,
+    start_time: str | float | None = None,
+    end_time: str | float | None = None,
+) -> str:
+    """Render a graph of profiling stats to an image file.
+
+    Produces a two-panel figure: calls/sec on top, average ns/call on the
+    bottom, one line per probe, sharing a time x-axis.
+
+    output_path: image file path to write; format is inferred from the
+                 extension (e.g. ".png", ".svg")
+    input_file:  path to a JSON file previously written by dump_stats. If
+                 given, stats are read from this file instead of the live
+                 profiler, so a dump taken earlier (or on another machine)
+                 can be graphed without a live connection.
+    names:       probe names to include, as returned by dump_stats or
+                 get_instruments (for methods: "className:methodSig").
+                 Defaults to every probe present in the stats.
+    start_time, end_time: window bounds, accepting the same forms as
+                 stat_summary (number of seconds in the past, or a
+                 [yyyy-][mm-][dd-]hh:mm:ss local-time string). Both default
+                 to unset, which graphs the full range of available data.
+
+    Skip the first 2-3 snapshots after instrumentation when choosing a
+    window — JIT recompilation makes those samples noisy.
+
+    Raises ValueError if a requested name is not present in the stats, or if
+    no probe has at least two snapshots in the requested window.
+    """
+    if input_file is not None:
+        with open(input_file) as f:
+            stats = json.load(f)
+    else:
+        stats = _client(ctx).get_stats()
+
+    start = resolve_time_arg(start_time) if start_time is not None else None
+    end   = resolve_time_arg(end_time) if end_time is not None else None
+
+    generate_stats_graph(
+        stats, output_path,
+        names=names,
+        start_time=start,
+        end_time=end,
+    )
+    return f"Graph written to {output_path}"
 
 
 @mcp.tool()

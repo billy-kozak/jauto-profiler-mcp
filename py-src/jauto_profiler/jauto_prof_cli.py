@@ -24,6 +24,7 @@ import sys
 import socket
 
 from .prof_client import ProfClient, compute_stat_summary
+from .prof_graph import generate_stats_graph
 from .time_util import parse_time_arg
 
 ###############################################################################
@@ -90,6 +91,25 @@ def cmd_stat_summary(client, args):
     stats = client.get_stats()
     result = compute_stat_summary(stats, args.name, start, end)
     print(json.dumps(result, indent=2))
+
+
+def cmd_graph_stats(client, args):
+    if args.input_file:
+        with open(args.input_file) as f:
+            stats = json.load(f)
+    else:
+        stats = client.get_stats()
+
+    start = parse_time_arg(args.start) if args.start else None
+    end   = parse_time_arg(args.end) if args.end else None
+
+    path = generate_stats_graph(
+        stats, args.output,
+        names=args.name,
+        start_time=start,
+        end_time=end,
+    )
+    print(f"graph written to {path}")
 
 
 def cmd_resume(client, args):
@@ -240,6 +260,46 @@ def build_parser():
     p.add_argument('start_time', metavar='start')
     p.add_argument('end_time', metavar='end', nargs='?', default='0')
 
+    p = sub.add_parser(
+        'graph-stats',
+        help='render a graph of profiling stats to an image file'
+    )
+    p.add_argument(
+        'output', metavar='output',
+        help=(
+            'output image path; format is inferred from the extension '
+            '(e.g. .png)'
+        ),
+    )
+    p.add_argument(
+        '--input-file', metavar='FILE',
+        help=(
+            'read stats from a JSON file previously written by dump-stats, '
+            'instead of querying the live profiler'
+        ),
+    )
+    p.add_argument(
+        '--name', metavar='NAME', action='append',
+        help=(
+            'probe name to include (repeatable); default: every probe '
+            'in the stats'
+        ),
+    )
+    p.add_argument(
+        '--start', metavar='START',
+        help=(
+            'window start time, same formats as stat-summary '
+            '(default: earliest available)'
+        ),
+    )
+    p.add_argument(
+        '--end', metavar='END',
+        help=(
+            'window end time, same formats as stat-summary '
+            '(default: latest available)'
+        ),
+    )
+
     sub.add_parser('resume', help='resume a JVM paused at startup')
 
     sub.add_parser('pause-threads', help='suspend all application threads')
@@ -286,6 +346,7 @@ def main():
         'deinstrument-by-id':  ClientCmd(client, cmd_deinstrument_by_id),
         'dump-stats':         ClientCmd(client, cmd_dump_stats),
         'stat-summary':       ClientCmd(client, cmd_stat_summary),
+        'graph-stats':        ClientCmd(client, cmd_graph_stats),
         'shutdown':           ClientCmd(client, cmd_shutdown),
         'resume':             ClientCmd(client, cmd_resume),
         'pause-threads':      ClientCmd(client, cmd_pause_threads),

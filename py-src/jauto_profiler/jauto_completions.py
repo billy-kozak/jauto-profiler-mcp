@@ -35,6 +35,7 @@ completion; any failure to connect or respond is treated as "no completions"
 rather than an error.
 """
 import argparse
+import json
 import subprocess
 import sys
 
@@ -140,6 +141,24 @@ def _complete_instrument_ids(prefix, socket_path):
     return [i for i in ids if i.startswith(prefix)]
 
 
+def _complete_graph_stats_names(prefix, socket_path, input_file):
+    """Probe-name completion for graph-stats --name.
+
+    Reads names from --input-file if one was already typed on the command
+    line (graph-stats can run entirely off a stat dump, with no live
+    profiler to query), falling back to a live query otherwise.
+    """
+    if input_file is not None:
+        try:
+            with open(input_file) as f:
+                stats = json.load(f)
+        except (OSError, ValueError):
+            return []
+        names = {p['name'] for p in stats.get('probes', [])}
+        return [n for n in names if n.startswith(prefix)]
+    return _complete_stat_names(prefix, socket_path)
+
+
 ###############################################################################
 # argparse introspection helpers
 ###############################################################################
@@ -188,6 +207,14 @@ def _split_args(sub_options, words_after):
         pending = None
 
     return positionals, pending
+
+
+def _find_option_value(words_after, option):
+    """Return the value already typed for `option` in words_after, if any."""
+    for i, tok in enumerate(words_after):
+        if tok == option and i + 1 < len(words_after):
+            return words_after[i + 1]
+    return None
 
 
 ###############################################################################
@@ -250,6 +277,20 @@ def _complete_stat_summary(subparser, words_after, cur, socket_path):
     return []
 
 
+def _complete_graph_stats(subparser, words_after, cur, socket_path):
+    positionals, pending = _split_args(_option_map(subparser), words_after)
+    if pending == '--input-file':
+        return _compgen_f(cur)
+    if pending == '--name':
+        input_file = _find_option_value(words_after, '--input-file')
+        return _complete_graph_stats_names(cur, socket_path, input_file)
+    if pending is not None:  # --start / --end: no completion
+        return []
+    if len(positionals) == 0:  # output
+        return _compgen_f(cur)
+    return []
+
+
 def _complete_deinstrument_by_id(subparser, words_after, cur, socket_path):
     positionals, pending = _split_args(_option_map(subparser), words_after)
     if pending is None and len(positionals) == 0:  # id
@@ -264,6 +305,7 @@ _SUBCOMMAND_COMPLETERS = {
     'deinstrument-by-id': _complete_deinstrument_by_id,
     'dump-stats': _complete_dump_stats,
     'stat-summary': _complete_stat_summary,
+    'graph-stats': _complete_graph_stats,
 }
 
 

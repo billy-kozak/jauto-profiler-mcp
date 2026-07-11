@@ -31,7 +31,7 @@ build-backend = "setuptools.build_meta"
 name = "jauto-profiler"
 version = "${VERSION}"
 requires-python = ">=3.10"
-dependencies = ["mcp"]
+dependencies = ["mcp", "matplotlib"]
 
 [project.scripts]
 jauto-prof = "jauto_profiler.jauto_prof_cli:main"
