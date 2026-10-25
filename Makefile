@@ -182,7 +182,7 @@ $(OUT_LIB): $(O_FILES) $(OUTPUT_DIR)/.dir_dummy
 	mkdir -p $(dir $(@))
 	@touch $(@)
 
-java: $(JAR_FILE)
+java: $(JAR_FILE) .classpath .project
 
 .classpath: $(ASM_JAR)
 	build-src/gen-eclipse-classpath $(JSRC_ROOT) $(ASM_JAR) $(JAVA_BUILD_DIR) $@
