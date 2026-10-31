@@ -27,7 +27,9 @@
 enum qi_type {
 	QI_METHOD,
 	QI_LINE_ENTER,
-	QI_LINE_EXIT
+	QI_LINE_EXIT,
+	/* Internal; see MI_VAR_BIND. Has no profiler (profiler_id is -1). */
+	QI_VAR_BIND
 };
 
 struct queued_instr {
@@ -38,6 +40,10 @@ struct queued_instr {
 	union {
 		struct pstring *method_sig;
 		int line_number;
+		struct {
+			struct pstring *var_name;
+			int line_number;
+		} var_bind;
 	};
 };
 
@@ -60,6 +66,13 @@ struct queued_instr *queued_instr_line_add(
 	int profiler_id,
 	uint64_t instrument_id,
 	enum qi_type type
+);
+struct queued_instr *queued_instr_var_bind_add(
+	struct queued_instr_list *arr,
+	const char *class_name,
+	const char *var_name,
+	int line_number,
+	uint64_t instrument_id
 );
 void queued_instr_list_remove_and_destroy(
 	struct queued_instr_list *arr, int index

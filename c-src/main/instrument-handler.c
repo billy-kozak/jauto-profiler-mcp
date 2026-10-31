@@ -500,14 +500,25 @@ static void do_deferred_instrumentations(
 		}
 
 		struct queued_instr *qi = &ctx->queued_instruments.arr[idx];
-		if (qi->type == QI_METHOD) {
+		switch (qi->type) {
+		case QI_METHOD:
 			do_deferred_method_instrumentation(
 				ctx, jni_env, jvmti, err_log, ci, qi
 			);
-		} else {
+			break;
+		case QI_LINE_ENTER:
+		case QI_LINE_EXIT:
 			do_deferred_line_instrumentation(
 				ctx, jni_env, jvmti, err_log, qi
 			);
+			break;
+		case QI_VAR_BIND:
+			/* Var bind instrumentation is not yet implemented. */
+			LOG_WARN(
+				"ignoring deferred var bind for %s",
+				(char *)ci->name->str
+			);
+			break;
 		}
 		queued_instr_list_remove_and_destroy(
 			&ctx->queued_instruments, idx
@@ -532,7 +543,8 @@ static int remove_queued_instr_by_id(
 
 	queued_instr_list_remove_and_destroy(queue, idx);
 
-	if(type == QI_METHOD) {
+	/* Only line instruments can have a second (exit) queue entry. */
+	if(type != QI_LINE_ENTER && type != QI_LINE_EXIT) {
 		assert(
 			queued_instr_list_find_by_instrument_id(queue, iid) < 0
 		);
@@ -546,7 +558,10 @@ static int remove_queued_instr_by_id(
 	}
 
 	assert(queue->arr[idx].profiler_id == profiler_id);
-	assert(queue->arr[idx].type != QI_METHOD);
+	assert(
+		queue->arr[idx].type == QI_LINE_ENTER ||
+		queue->arr[idx].type == QI_LINE_EXIT
+	);
 
 	queued_instr_list_remove_and_destroy(queue, idx);
 
@@ -924,15 +939,20 @@ enum deinstrument_resp_status ih_deinstrument_by_id(
 	if (entry == NULL) {
 		return DEINSTRUMENT_RP_FAIL;
 	}
-	if (entry->type == MI_LINE) {
-		return deinstrument_line_by_id(
-			ctx, jni_env, jvmti, entry, instrument_id
-		);
-	} else {
+	switch (entry->type) {
+	case MI_METHOD:
 		return deinstrument_method_by_id(
 			ctx, jni_env, jvmti, entry, instrument_id
 		);
+	case MI_LINE:
+		return deinstrument_line_by_id(
+			ctx, jni_env, jvmti, entry, instrument_id
+		);
+	case MI_VAR_BIND:
+		/* Hidden from the user, so respond as if the id is unknown. */
+		break;
 	}
+	return DEINSTRUMENT_RP_FAIL;
 }
 
 void ih_apply_deferred_instrumentations(

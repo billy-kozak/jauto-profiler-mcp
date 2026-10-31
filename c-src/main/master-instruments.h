@@ -25,7 +25,13 @@
 
 enum mi_type {
 	MI_METHOD,
-	MI_LINE
+	MI_LINE,
+	/*
+	 * Internal instrument which binds a local variable to the profiler.
+	 * Not visible to the user: never listed, reported, or removable by
+	 * id from a user request. See mi_type_is_user_visible().
+	 */
+	MI_VAR_BIND
 };
 
 struct master_instruments;
@@ -45,6 +51,11 @@ struct mi_entry {
 			bool entry_deferred;
 			bool exit_deferred;
 		} line;
+		struct {
+			struct pstring *var_name;
+			int line_number;
+			bool deferred;
+		} var_bind;
 	};
 };
 
@@ -60,6 +71,12 @@ struct mi_val {
 static inline bool mi_line_is_ready(const struct mi_entry *ent)
 {
 	return !ent->line.entry_deferred && !ent->line.exit_deferred;
+}
+
+/* Whether instruments of this type may be exposed to user requests. */
+static inline bool mi_type_is_user_visible(enum mi_type type)
+{
+	return type == MI_METHOD || type == MI_LINE;
 }
 
 struct master_instruments *mi_alloc(void);
@@ -85,12 +102,19 @@ struct mi_val mi_add_linep(
 	int entry_line,
 	int exit_line
 );
+struct mi_val mi_add_var_bind(
+	struct master_instruments *mi,
+	const char *class_name,
+	const char *var_name,
+	int line_number
+);
 
 void mi_remove(struct master_instruments *mi, uint64_t id);
 
 int mi_mark_method_applied(struct master_instruments *mi, uint64_t id);
 int mi_mark_line_entry_applied(struct master_instruments *mi, uint64_t id);
 int mi_mark_line_exit_applied(struct master_instruments *mi, uint64_t id);
+int mi_mark_var_bind_applied(struct master_instruments *mi, uint64_t id);
 
 const struct mi_entry *mi_find(
 	const struct master_instruments *mi, uint64_t id

@@ -41,10 +41,16 @@ static void mi_entry_free(void *p)
 {
 	struct mi_entry *e = p;
 	free(e->entry_class_name);
-	if (e->type == MI_METHOD) {
+	switch (e->type) {
+	case MI_METHOD:
 		free(e->method.method_name);
-	} else {
+		break;
+	case MI_LINE:
 		free(e->line.exit_class_name);
+		break;
+	case MI_VAR_BIND:
+		free(e->var_bind.var_name);
+		break;
 	}
 	free(e);
 }
@@ -183,6 +189,33 @@ struct mi_val mi_add_line(
 	return ret;
 }
 
+struct mi_val mi_add_var_bind(
+	struct master_instruments *mi,
+	const char *class_name,
+	const char *var_name,
+	int line_number
+) {
+	struct mi_val ret = {0, NULL};
+	struct mi_entry *e = malloc(sizeof(*e));
+	if (e == NULL) {
+		return ret;
+	}
+	e->type = MI_VAR_BIND;
+	e->entry_class_name       = pstring_from_cstr(class_name);
+	e->var_bind.var_name      = pstring_from_cstr(var_name);
+	e->var_bind.line_number   = line_number;
+	e->var_bind.deferred      = true;
+
+	if (e->entry_class_name == NULL || e->var_bind.var_name == NULL) {
+		mi_entry_free(e);
+		return ret;
+	}
+
+	ret.id = mi_insert(mi, e);
+	ret.entry = e;
+	return ret;
+}
+
 void mi_remove(struct master_instruments *mi, uint64_t id)
 {
 	void *val = hash_tab_remove(mi->tab, (uint8_t *)&id, sizeof(id));
@@ -230,6 +263,16 @@ int mi_mark_line_exit_applied(struct master_instruments *mi, uint64_t id)
 		return -1;
 	}
 	e->line.exit_deferred = false;
+	return 0;
+}
+
+int mi_mark_var_bind_applied(struct master_instruments *mi, uint64_t id)
+{
+	struct mi_entry *e = mi_find_mut(mi, id);
+	if (e == NULL || e->type != MI_VAR_BIND) {
+		return -1;
+	}
+	e->var_bind.deferred = false;
 	return 0;
 }
 

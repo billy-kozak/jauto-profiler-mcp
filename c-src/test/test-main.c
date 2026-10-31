@@ -23,6 +23,7 @@
 TEST_SUITE_DECL(murmur3_suite);
 TEST_SUITE_DECL(pstring_suite);
 TEST_SUITE_DECL(hash_tab_suite);
+TEST_SUITE_DECL(instrument_ds_suite);
 
 int main(int argc, char **argv) {
 
@@ -31,6 +32,7 @@ int main(int argc, char **argv) {
 	ret += pstring_suite();
 	ret += murmur3_suite();
 	ret += hash_tab_suite();
+	ret += instrument_ds_suite();
 
 	if(ret == 0) {
 		printf("All tests passed!\n");

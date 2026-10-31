@@ -59,11 +59,34 @@ static void queued_instr_line_init(
 	qi->line_number = line_number;
 }
 
+static void queued_instr_var_bind_init(
+	struct queued_instr *qi,
+	const char *class_name,
+	const char *var_name,
+	int line_number,
+	uint64_t instrument_id
+) {
+	qi->type = QI_VAR_BIND;
+	qi->instrument_id = instrument_id;
+	qi->profiler_id = -1;
+	qi->class_name = pstring_from_cstr(class_name);
+	qi->var_bind.var_name = pstring_from_cstr(var_name);
+	qi->var_bind.line_number = line_number;
+}
+
 static void queued_instr_destroy(struct queued_instr *qi)
 {
 	free(qi->class_name);
-	if (qi->type == QI_METHOD) {
+	switch (qi->type) {
+	case QI_METHOD:
 		free(qi->method_sig);
+		break;
+	case QI_VAR_BIND:
+		free(qi->var_bind.var_name);
+		break;
+	case QI_LINE_ENTER:
+	case QI_LINE_EXIT:
+		break;
 	}
 }
 
@@ -99,6 +122,24 @@ struct queued_instr *queued_instr_line_add(
 		queued_instr_line_init(
 			qi, class_name, line_number,
 			profiler_id, instrument_id, type
+		);
+	}
+
+	return qi;
+}
+
+struct queued_instr *queued_instr_var_bind_add(
+	struct queued_instr_list *arr,
+	const char *class_name,
+	const char *var_name,
+	int line_number,
+	uint64_t instrument_id
+) {
+	struct queued_instr *qi = queued_instr_list_add(arr);
+
+	if (qi != NULL) {
+		queued_instr_var_bind_init(
+			qi, class_name, var_name, line_number, instrument_id
 		);
 	}
 

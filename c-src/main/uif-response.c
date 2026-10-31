@@ -248,6 +248,9 @@ int uif_respond_list_instrumented(
 
 	mi_itr_init(mi, &itr);
 	while ((result = mi_iterate(mi, &itr)).entry != NULL) {
+		if (!mi_type_is_user_visible(result.entry->type)) {
+			continue;
+		}
 		body_size += sizeof(struct user_msg_instr_list_entry);
 		if (result.entry->type == MI_METHOD) {
 			body_size += pstring_total_size(
@@ -287,6 +290,9 @@ int uif_respond_list_instrumented(
 	mi_itr_init(mi, &itr);
 	while ((result = mi_iterate(mi, &itr)).entry != NULL) {
 		bool is_deferred;
+		if (!mi_type_is_user_visible(result.entry->type)) {
+			continue;
+		}
 		if (result.entry->type == MI_METHOD) {
 			is_deferred = result.entry->method.deferred;
 		} else {
