@@ -186,7 +186,7 @@ static int create_profiler_for_method(
 		(char *)entry->entry_class_name->str,
 		(char *)entry->method.method_name->str
 	);
-	if (id < 0 && id != -1) {
+	if (id < 0) {
 		LOG_ERROR("jni_create_profiler failed");
 	}
 	return id;
@@ -734,6 +734,31 @@ cleanup:
 	return status;
 }
 
+/*
+ * Adds a method instrument to master instruments unless one already exists.
+ */
+static enum instrument_resp_status add_master_method(
+	struct instr_ctx *ctx,
+	const char *class_name,
+	const char *method_sig,
+	struct mi_val *miv_out
+) {
+	*miv_out = mi_find_method_by_name(
+		ctx->master_instruments, class_name, method_sig
+	);
+	if (miv_out->entry != NULL) {
+		return INSTRUMENT_RP_DOUBLE_INSTRUMENT;
+	}
+
+	*miv_out = mi_add_method(
+		ctx->master_instruments, class_name, class_name, method_sig
+	);
+	if (miv_out->id == 0) {
+		return INSTRUMENT_RP_ERROR;
+	}
+	return INSTRUMENT_RP_OK;
+}
+
 /* ── public entry points ────────────────────────────────────────────────── */
 
 enum instrument_resp_status ih_instrument_method(
@@ -744,16 +769,17 @@ enum instrument_resp_status ih_instrument_method(
 	const char *method_sig,
 	uint64_t *instrument_id_out
 ) {
-	struct mi_val miv = mi_add_method(
-		ctx->master_instruments, class_name, class_name, method_sig
+	struct mi_val miv;
+	enum instrument_resp_status add_status = add_master_method(
+		ctx, class_name, method_sig, &miv
 	);
 	uint64_t instrument_id = miv.id;
 	const struct mi_entry *entry = miv.entry;
 
 	*instrument_id_out = instrument_id;
 
-	if (instrument_id == 0) {
-		return INSTRUMENT_RP_ERROR;
+	if (add_status != INSTRUMENT_RP_OK) {
+		return add_status;
 	}
 
 	int profiler_id = create_profiler_for_method(
@@ -761,8 +787,7 @@ enum instrument_resp_status ih_instrument_method(
 	);
 	if (profiler_id < 0) {
 		mi_remove(ctx->master_instruments, instrument_id);
-		return profiler_id == -1 ?
-			INSTRUMENT_RP_DOUBLE_INSTRUMENT : INSTRUMENT_RP_ERROR;
+		return INSTRUMENT_RP_ERROR;
 	}
 
 	struct class_info *ci = ci_list_find_by_name(

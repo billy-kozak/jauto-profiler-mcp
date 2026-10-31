@@ -90,8 +90,9 @@ def instrument_method(ctx: Context, class_name: str, method_sig: str) -> dict:
 
     Returns "ok" if instrumentation was applied immediately, or "deferred" if
     the class is not yet loaded (instrumentation will be applied automatically
-    when the class loads). Raises on failure, including if the method is
-    already instrumented.
+    when the class loads). Raises on failure. If the method is already
+    instrumented (active or deferred) the call is rejected and the error
+    names the existing instrument_id.
 
     IMPORTANT — call sequentially, not in parallel. Each call triggers a JVM
     retransformation; firing multiple calls simultaneously can cause failures

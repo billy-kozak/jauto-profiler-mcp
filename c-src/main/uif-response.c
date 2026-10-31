@@ -161,10 +161,13 @@ int uif_respond_instrument(
 	uint64_t instrument_id
 ) {
 	struct user_msg_instr_resp body = {(uint32_t)status, instrument_id};
-	bool status_ok = (
-		status == INSTRUMENT_RP_OK || status == INSTRUMENT_RP_DEFERRED
+	/* On a double instrument, the id is that of the existing instrument */
+	bool has_id = (
+		status == INSTRUMENT_RP_OK ||
+		status == INSTRUMENT_RP_DEFERRED ||
+		status == INSTRUMENT_RP_DOUBLE_INSTRUMENT
 	);
-	if (!status_ok) {
+	if (!has_id) {
 		body.instrument_id = 0;
 	}
 

@@ -324,7 +324,10 @@ class ProfClient:
         status, instrument_id = struct.unpack("<IQ", resp.raw_body)
 
         if status == 1:
-            raise RuntimeError("method is already instrumented")
+            raise RuntimeError(
+                f"{class_name} {method_sig} is already instrumented "
+                f"(instrument_id={instrument_id})"
+            )
 
         if status == 3:
             return {"status": "deferred", "instrument_id": instrument_id}
