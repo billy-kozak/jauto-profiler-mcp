@@ -88,18 +88,20 @@ void mi_free(struct master_instruments *mi)
 	free(mi);
 }
 
-static uint64_t mi_insert(struct master_instruments *mi, struct mi_entry *e)
-{
+/* Takes ownership of e; on failure e is freed and {0, NULL} is returned. */
+static struct mi_val mi_insert(
+	struct master_instruments *mi, struct mi_entry *e
+) {
 	uint64_t id = mi->next_id;
 	struct hash_add_result r = hash_tab_add(
 		mi->tab, (uint8_t *)&id, sizeof(id), e
 	);
 	if (r.err != 0) {
 		mi_entry_free(e);
-		return 0;
+		return (struct mi_val){0, NULL};
 	}
 	mi->next_id++;
-	return id;
+	return (struct mi_val){id, e};
 }
 
 struct mi_val mi_add_method(
@@ -123,10 +125,7 @@ struct mi_val mi_add_method(
 		return ret;
 	}
 
-	ret.id = mi_insert(mi, e);
-	ret.entry = e;
-
-	return ret;
+	return mi_insert(mi, e);
 }
 
 struct mi_val mi_add_linep(
@@ -154,9 +153,7 @@ struct mi_val mi_add_linep(
 		return ret;
 	}
 
-	ret.id = mi_insert(mi, e);
-	ret.entry = e;
-	return ret;
+	return mi_insert(mi, e);
 }
 
 struct mi_val mi_add_line(
@@ -184,9 +181,7 @@ struct mi_val mi_add_line(
 		return ret;
 	}
 
-	ret.id = mi_insert(mi, e);
-	ret.entry = e;
-	return ret;
+	return mi_insert(mi, e);
 }
 
 struct mi_val mi_add_var_bind(
@@ -211,9 +206,7 @@ struct mi_val mi_add_var_bind(
 		return ret;
 	}
 
-	ret.id = mi_insert(mi, e);
-	ret.entry = e;
-	return ret;
+	return mi_insert(mi, e);
 }
 
 void mi_remove(struct master_instruments *mi, uint64_t id)
