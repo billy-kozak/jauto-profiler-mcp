@@ -23,4 +23,4 @@ event queue coordinates all the various parts of the system, including the user 
 interface, and essentially acts as the 'brains' of the profiler. The profiler server runs as an JVMTI agent thread,
 so that it can directly make JNI and JVMTI calls.
 
-The CLI tools and MCP server are written in python. The MCP server runs on FastMCP.
+The CLI tools and MCP server are written in python. The MCP server runs on the MCP Python SDK (2.x) `MCPServer`.

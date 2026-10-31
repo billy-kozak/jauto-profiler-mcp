@@ -78,7 +78,7 @@ Requires python3 and openjdk 8 or higher to build and run.
 
 Other dependencies are downloaded automatically by the build and setup scripts, which includes:
 
-- FastMCP (python library).
+- MCP Python SDK (`mcp` 2.x).
 - ASM (Java library).
 
 # Developing

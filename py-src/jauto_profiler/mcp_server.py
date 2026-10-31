@@ -18,10 +18,12 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.       #
 ###############################################################################
 
+import functools
 import json
 from contextlib import asynccontextmanager
 
-from mcp.server.fastmcp import FastMCP, Context
+from mcp.server.mcpserver import MCPServer, Context
+from mcp.server.mcpserver.exceptions import ToolError
 
 from .prof_client import ProfClient, compute_stat_summary
 from .prof_graph import generate_stats_graph
@@ -43,14 +45,36 @@ async def lifespan(server):
 # MCP server
 ###############################################################################
 
-mcp = FastMCP("jauto-profiler", lifespan=lifespan)
+mcp = MCPServer("jauto-profiler", lifespan=lifespan)
+
+
+# Errors the profiler client raises for anticipated failures (bad arguments,
+# rejected requests, connection problems). The CLI reports the same set.
+_EXPECTED_ERRORS = (RuntimeError, ConnectionError, ValueError, OSError)
+
+
+def _tool():
+    """Register a tool, reporting expected errors to the caller.
+
+    MCPServer withholds the message of any exception other than ToolError, so
+    expected errors are re-raised as ToolError to reach the model.
+    """
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            try:
+                return fn(*args, **kwargs)
+            except _EXPECTED_ERRORS as e:
+                raise ToolError(str(e)) from e
+        return mcp.tool()(wrapper)
+    return decorator
 
 
 def _client(ctx: Context) -> ProfClient:
     return ctx.request_context.lifespan_context["client"]
 
 
-@mcp.tool()
+@_tool()
 def get_loaded_classes(ctx: Context) -> list[str]:
     """Return all classes currently loaded in the attached JVM.
 
@@ -64,7 +88,7 @@ def get_loaded_classes(ctx: Context) -> list[str]:
     return _client(ctx).get_loaded_classes()
 
 
-@mcp.tool()
+@_tool()
 def get_class_methods(ctx: Context, class_name: str) -> list[str]:
     """Return the methods of a loaded class as 'name:descriptor' strings.
 
@@ -81,7 +105,7 @@ def get_class_methods(ctx: Context, class_name: str) -> list[str]:
     return _client(ctx).get_class_methods(class_name)
 
 
-@mcp.tool()
+@_tool()
 def instrument_method(ctx: Context, class_name: str, method_sig: str) -> dict:
     """Instrument a method so that entry/exit times and call counts are recorded.
 
@@ -106,7 +130,7 @@ def instrument_method(ctx: Context, class_name: str, method_sig: str) -> dict:
     return _client(ctx).instrument_method(class_name, method_sig)
 
 
-@mcp.tool()
+@_tool()
 def instrument_line(
     ctx: Context,
     entry_class: str,
@@ -135,7 +159,7 @@ def instrument_line(
     )
 
 
-@mcp.tool()
+@_tool()
 def get_async_errors(ctx: Context) -> list[dict]:
     """Return all errors from the profiler's asynchronous error log.
 
@@ -155,7 +179,7 @@ def get_async_errors(ctx: Context) -> list[dict]:
     return _client(ctx).get_async_errors()
 
 
-@mcp.tool()
+@_tool()
 def get_instruments(ctx: Context) -> list[dict]:
     """Return all currently instrumented and deferred probes.
 
@@ -182,7 +206,7 @@ def get_instruments(ctx: Context) -> list[dict]:
     return _client(ctx).get_instruments()
 
 
-@mcp.tool()
+@_tool()
 def deinstrument_by_id(ctx: Context, instrument_id: int) -> None:
     """Remove instrumentation using the instrument ID returned by instrument_method.
 
@@ -197,7 +221,7 @@ def deinstrument_by_id(ctx: Context, instrument_id: int) -> None:
     _client(ctx).deinstrument_by_id(instrument_id)
 
 
-@mcp.tool()
+@_tool()
 def deinstrument_method(ctx: Context, class_name: str, method_sig: str) -> None:
     """Remove instrumentation from a previously instrumented method.
 
@@ -211,7 +235,7 @@ def deinstrument_method(ctx: Context, class_name: str, method_sig: str) -> None:
     _client(ctx).deinstrument_method(class_name, method_sig)
 
 
-@mcp.tool()
+@_tool()
 def dump_stats(ctx: Context, output_file: str) -> str:
     """Write profiling statistics for all active probes to a JSON file.
 
@@ -253,7 +277,7 @@ def dump_stats(ctx: Context, output_file: str) -> str:
     return f"Stats written to {output_file}"
 
 
-@mcp.tool()
+@_tool()
 def stat_summary(
     ctx: Context,
     name: str,
@@ -293,7 +317,7 @@ def stat_summary(
     return compute_stat_summary(stats, name, start, end)
 
 
-@mcp.tool()
+@_tool()
 def graph_stats(
     ctx: Context,
     output_path: str,
@@ -345,7 +369,7 @@ def graph_stats(
     return f"Graph written to {output_path}"
 
 
-@mcp.tool()
+@_tool()
 def shutdown_jvm(ctx: Context) -> None:
     """Request the profiled JVM to shut down cleanly via System.exit(0).
 
@@ -357,7 +381,7 @@ def shutdown_jvm(ctx: Context) -> None:
     _client(ctx).shutdown()
 
 
-@mcp.tool()
+@_tool()
 def pause_threads(ctx: Context) -> str:
     """Pause all application threads in the attached JVM.
 
@@ -373,7 +397,7 @@ def pause_threads(ctx: Context) -> str:
     return _client(ctx).pause_threads()
 
 
-@mcp.tool()
+@_tool()
 def resume_application(ctx: Context) -> str:
     """Resume a paused JVM.
 
@@ -399,7 +423,7 @@ def resume_application(ctx: Context) -> str:
     return _client(ctx).resume()
 
 
-@mcp.tool()
+@_tool()
 def get_status(ctx: Context) -> dict:
     """Return the current state of the profiler server.
 
@@ -417,7 +441,7 @@ def get_status(ctx: Context) -> dict:
     return _client(ctx).get_status()
 
 
-@mcp.tool()
+@_tool()
 def connect(
     ctx: Context,
     unix_path: str | None = None,
