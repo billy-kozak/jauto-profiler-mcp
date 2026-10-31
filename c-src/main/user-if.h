@@ -62,6 +62,11 @@ enum user_msg_type {
 	RESPONSE_GET_STATUS = 24,
 };
 
+enum class_methods_resp_status {
+	CLASS_METHODS_RP_OK         = 0,
+	CLASS_METHODS_RP_NOT_LOADED = 1,
+};
+
 enum instrument_resp_status {
 	INSTRUMENT_RP_OK = 0,
 	INSTRUMENT_RP_DOUBLE_INSTRUMENT = 1,
@@ -102,6 +107,14 @@ enum listed_instr_type {
 	LISTED_INSTR_TYPE_METHOD = 0,
 	LISTED_INSTR_TYPE_LINE   = 1,
 };
+
+/*
+ * Body of RESPONSE_CLASS_METHODS:
+ *   uint32_t status (enum class_methods_resp_status)
+ *   uint32_t count
+ *   count × pstring method_sig
+ * count is 0 unless status is CLASS_METHODS_RP_OK.
+ */
 
 /*
  * Body of RESPONSE_LIST_INSTRUMENTED:

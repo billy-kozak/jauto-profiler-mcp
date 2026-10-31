@@ -73,7 +73,8 @@ def get_class_methods(ctx: Context, class_name: str) -> list[str]:
     signatures from this output verbatim — do not construct them by hand,
     as descriptor syntax is precise and errors will cause silent failures.
 
-    Returns an empty list if the class has not been loaded or has no methods.
+    Raises "no such class loaded" if the class has not been loaded by the
+    JVM yet (instrument_method still accepts such classes as deferred).
 
     Example output entry: "doWork:(ILjava/lang/String;)V"
     """

@@ -114,10 +114,12 @@ int uif_respond_class_methods(
 	struct user_msg *response;
 	uint8_t *p;
 	size_t body_size;
+	uint32_t status;
 	uint32_t count;
 	size_t i;
 
-	body_size = sizeof(uint32_t);
+	status = (ci != NULL) ? CLASS_METHODS_RP_OK : CLASS_METHODS_RP_NOT_LOADED;
+	body_size = sizeof(status) + sizeof(count);
 	if (ci != NULL) {
 		for (i = 0; i < ci->methods.len; i++) {
 			body_size += pstring_total_size(ci->methods.arr[i]);
@@ -138,6 +140,8 @@ int uif_respond_class_methods(
 	response->size = (uint32_t)body_size;
 	p = response->body.raw;
 
+	memcpy(p, &status, sizeof(status));
+	p += sizeof(status);
 	memcpy(p, &count, sizeof(count));
 	p += sizeof(count);
 

@@ -59,6 +59,9 @@ _RESUME_STATUS_UNBLOCKED = 0
 _RESUME_STATUS_NOCHANGE  = 1
 _RESUME_STATUS_ERROR     = 2
 
+_CLASS_METHODS_STATUS_OK         = 0
+_CLASS_METHODS_STATUS_NOT_LOADED = 1
+
 _PAUSE_THREADS_STATUS_OK             = 0
 _PAUSE_THREADS_STATUS_ALREADY_PAUSED = 1
 _PAUSE_THREADS_STATUS_ERROR          = 2
@@ -579,7 +582,18 @@ class ProfClient:
         if resp.message_type != _MSG_TYPE_RESPONSE_CLASS_METHODS:
             raise ValueError("Unexpected response")
 
-        return self._parse_string_list(resp.raw_body)
+        if len(resp.raw_body) < 4:
+            raise ValueError("response body too short")
+
+        (status,) = struct.unpack_from("<I", resp.raw_body, 0)
+
+        if status == _CLASS_METHODS_STATUS_NOT_LOADED:
+            raise RuntimeError(f"no such class loaded: {class_name}")
+
+        if status != _CLASS_METHODS_STATUS_OK:
+            raise RuntimeError("get_class_methods failed")
+
+        return self._parse_string_list(resp.raw_body[4:])
 
 
 def compute_stat_summary(
